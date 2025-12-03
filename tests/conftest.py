@@ -6,11 +6,11 @@ import pytest
 def spore_techs_dict():
     """Fixture for the SPORE technologies dictionary."""
     return {
-        'Generator': {
-            'p_nom': {
-                'solar': 0,
-                'wind': 0,
-                'gas': 0,
+        "Generator": {
+            "p_nom": {
+                "solar": 0,
+                "wind": 0,
+                "gas": 0,
             }
         }
     }
@@ -39,6 +39,7 @@ class MockPypsaNetwork:
 
     It's designed to work with the `calculate_relative_deployment` function.
     """
+
     def __init__(self, p_nom_opt_data, p_nom_max_data=None):
         techs = list(p_nom_opt_data.keys())
         p_nom_opt = list(p_nom_opt_data.values())
@@ -50,8 +51,7 @@ class MockPypsaNetwork:
             p_nom_max = list(p_nom_max_data.values())
 
         self.generators = pd.DataFrame(
-            {'p_nom_opt': p_nom_opt, 'p_nom_max': p_nom_max},
-            index=techs
+            {"p_nom_opt": p_nom_opt, "p_nom_max": p_nom_max}, index=techs
         )
 
     def get_extendable_i(self, component):

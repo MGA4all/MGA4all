@@ -37,7 +37,9 @@ def run_spores(
     solver_options: dict,
     weighting_method: str | None = None,
     upper_bound: int = 100,
-) -> tuple[dict[str, pypsa.Network], dict[str, dict], dict[str, linopy.Model], list[dict]]:
+) -> tuple[
+    dict[str, pypsa.Network], dict[str, dict], dict[str, linopy.Model], list[dict]
+]:
     """Run the SPORES optimization to generate multiple near-optimal solutions."""
     # Validate the SPORES configuration.
     validate_spores_configuration(spores_config)
@@ -52,13 +54,18 @@ def run_spores(
         weighting_method = config_data.get("weighting_method")
 
     if weighting_method not in WEIGHTING_METHODS:
-        raise ValueError(f"Unsupported {weighting_method=}, must be one of {WEIGHTING_METHODS}.")
+        raise ValueError(
+            f"Unsupported {weighting_method=}, must be one of {WEIGHTING_METHODS}."
+        )
 
     # Get the least-cost optimal solution from the solved network.
     # Check if the network is already optimized, else raise an error.
     if not least_cost_network.is_solved:
         raise ValueError("The input network must be optimized before running SPORES.")
-    optimal_cost = least_cost_network.statistics.capex().sum() + least_cost_network.statistics.opex().sum()
+    optimal_cost = (
+        least_cost_network.statistics.capex().sum()
+        + least_cost_network.statistics.opex().sum()
+    )
 
     # Initialize collectors to store results/history
     spore_networks = {}
@@ -71,7 +78,10 @@ def run_spores(
 
     # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
     # copying networks with a solver_model attached, so we need to remove it first.
-    if hasattr(least_cost_network.model, "solver_model") and least_cost_network.model is not None:
+    if (
+        hasattr(least_cost_network.model, "solver_model")
+        and least_cost_network.model is not None
+    ):
         least_cost_network.model.solver_model = None
 
     # Run SPORES
@@ -83,10 +93,14 @@ def run_spores(
             prev_weights = initialize_weights(config_data)
 
             # Calculation of new weights in the 1st iteration depends on the `spores_mode`.
-            new_weights = calculate_weights_first_iteration(network, config_data["spores_mode"], prev_weights)
+            new_weights = calculate_weights_first_iteration(
+                network, config_data["spores_mode"], prev_weights
+            )
 
         else:
-            prev_weights = weights[f"weights_{i - 1}"]  # Needed for relative_deployment weighting methods.
+            prev_weights = weights[
+                f"weights_{i - 1}"
+            ]  # Needed for relative_deployment weighting methods.
 
             prev_spore = spore_networks[f"spore_{i - 1}"]
 
@@ -95,20 +109,32 @@ def run_spores(
                 new_weights = calculate_weights_random(spore_techs_dict, upper_bound)
 
             elif weighting_method == "relative_deployment":
-                new_weights = calculate_weights_relative_deployment(prev_spore, prev_weights)
+                new_weights = calculate_weights_relative_deployment(
+                    prev_spore, prev_weights
+                )
 
             elif weighting_method == "relative_deployment_normalized":
-                new_weights = calculate_weights_relative_deployment_normalized(prev_spore, prev_weights)
+                new_weights = calculate_weights_relative_deployment_normalized(
+                    prev_spore, prev_weights
+                )
 
             elif weighting_method == "evolving_median":
-                new_weights = calculate_weights_evolving_median(prev_spore, deploy_his, spore_techs_dict)
+                new_weights = calculate_weights_evolving_median(
+                    prev_spore, deploy_his, spore_techs_dict
+                )
 
             elif weighting_method == "evolving_average":
-                new_weights = calculate_weights_evolving_average(prev_spore, deploy_his, spore_techs_dict)
+                new_weights = calculate_weights_evolving_average(
+                    prev_spore, deploy_his, spore_techs_dict
+                )
 
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
-        modified_model = create_modified_model(network, config_data, optimal_cost, new_weights)
-        new_spore, solved_model = optimize_model_and_assign_solution_to_network(network, modified_model, solver_options)
+        modified_model = create_modified_model(
+            network, config_data, optimal_cost, new_weights
+        )
+        new_spore, solved_model = optimize_model_and_assign_solution_to_network(
+            network, modified_model, solver_options
+        )
 
         weights[f"weights_{i}"] = new_weights
         spore_networks[f"spore_{i}"] = new_spore
@@ -153,7 +179,9 @@ def calculate_weights_relative_deployment(n: pypsa.Network, prev_weights: dict) 
     return new_weights
 
 
-def calculate_weights_relative_deployment_normalized(n: pypsa.Network, prev_weights: dict) -> dict:
+def calculate_weights_relative_deployment_normalized(
+    n: pypsa.Network, prev_weights: dict
+) -> dict:
     """Calculate weights as in `calculate_weights_relative_deployment` then normalizes w.r.t. the max_weight."""
     new_weights = calculate_weights_relative_deployment(n, prev_weights)
 
@@ -179,7 +207,7 @@ def calculate_weights_evolving_median(
     latest_spore: pypsa.Network,
     deployment_history: list[dict],
     spore_techs_dict: dict,
-    clip_min: float = 0.001
+    clip_min: float = 0.001,
 ) -> dict:
     """Calculates weights based on the reciprocal of the relative distance from the evolving median capacity.
 
@@ -188,7 +216,9 @@ def calculate_weights_evolving_median(
     a tech is [0, 0, 0, 0, 1000], the average would be 200. A new solution with 0 deployment would be penalized. While
     the median would be 0. A new solution with 0 deployment would get a weight of 0, identifying it as an underexplored.
     """
-    median_deployment = calculate_median_deployment(deployment_history, spore_techs_dict)
+    median_deployment = calculate_median_deployment(
+        deployment_history, spore_techs_dict
+    )
     latest_deployment = get_tech_deployment(latest_spore, spore_techs_dict)
 
     new_weights = {}
@@ -200,14 +230,19 @@ def calculate_weights_evolving_median(
             new_weights[component].setdefault(attr, {})
 
             for tech, median_deployed_cap in techs_median_deployment_map.items():
-                latest_deployed_cap = latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
+                latest_deployed_cap = (
+                    latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
+                )
 
                 if median_deployed_cap > 0:
-                    relative_change = abs(latest_deployed_cap - median_deployed_cap) / median_deployed_cap
+                    relative_change = (
+                        abs(latest_deployed_cap - median_deployed_cap)
+                        / median_deployed_cap
+                    )
 
                     # If the relative_change is 0 (latest_deployed_cap == median), we give the relative_change a small
                     # value which will give it a large penalty (weight) since we take the reciprocal of the change.
-                    weight = 1 /  max(relative_change, clip_min)
+                    weight = 1 / max(relative_change, clip_min)
 
                 elif median_deployed_cap == 0:
                     # If the median_deployed_cap is 0, we want to encourage the deployment of this technology.
@@ -222,10 +257,12 @@ def calculate_weights_evolving_average(
     latest_spore: pypsa.Network,
     deployment_history: list[dict],
     spore_techs_dict: dict,
-    clip_min: float = 0.001
+    clip_min: float = 0.001,
 ) -> dict:
     """Calculates weights based on the reciprocal of the relative distance from the evolving average capacity."""
-    average_deployment = calculate_average_deployment(deployment_history, spore_techs_dict)
+    average_deployment = calculate_average_deployment(
+        deployment_history, spore_techs_dict
+    )
     latest_deployment = get_tech_deployment(latest_spore, spore_techs_dict)
 
     new_weights = {}
@@ -237,14 +274,19 @@ def calculate_weights_evolving_average(
             new_weights[component].setdefault(attr, {})
 
             for tech, average_deployed_cap in techs_average_deployment_map.items():
-                latest_deployed_cap = latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
+                latest_deployed_cap = (
+                    latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
+                )
 
                 if average_deployed_cap > 0:
-                    relative_change = abs(latest_deployed_cap - average_deployed_cap) / average_deployed_cap
+                    relative_change = (
+                        abs(latest_deployed_cap - average_deployed_cap)
+                        / average_deployed_cap
+                    )
 
                     # If the relative_change is 0 (latest_deployed_cap == average), we give the relative_change a small
                     # value which will give it a large penalty (weight) since we take the reciprocal of the change.
-                    weight = 1 /  max(relative_change, clip_min)
+                    weight = 1 / max(relative_change, clip_min)
 
                 elif average_deployed_cap == 0:
                     # If the average_deployed_cap is 0, we want to encourage the deployment of this technology.
@@ -255,7 +297,9 @@ def calculate_weights_evolving_average(
     return new_weights
 
 
-def calculate_relative_deployment(n: pypsa.Network, spore_techs_dict: dict, bigM: float = 1e10) -> dict:
+def calculate_relative_deployment(
+    n: pypsa.Network, spore_techs_dict: dict, bigM: float = 1e10
+) -> dict:
     """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
     relative_deployment = {}
 
@@ -278,7 +322,9 @@ def calculate_relative_deployment(n: pypsa.Network, spore_techs_dict: dict, bigM
     return relative_deployment
 
 
-def calculate_average_deployment(deployment_history: list[dict], spore_techs_dict: dict) -> dict:
+def calculate_average_deployment(
+    deployment_history: list[dict], spore_techs_dict: dict
+) -> dict:
     """Calculates the average capacity deployment of spore technologies."""
     average_deployment = {}
 
@@ -292,12 +338,16 @@ def calculate_average_deployment(deployment_history: list[dict], spore_techs_dic
                     for deployed_capacity in deployment_history
                 )
 
-                average_deployment[component][attr][tech] = total_deployed_capacity / len(deployment_history)
+                average_deployment[component][attr][tech] = (
+                    total_deployed_capacity / len(deployment_history)
+                )
 
     return average_deployment
 
 
-def calculate_median_deployment(deployment_history: list[dict], spore_techs_dict: dict) -> dict:
+def calculate_median_deployment(
+    deployment_history: list[dict], spore_techs_dict: dict
+) -> dict:
     """Calculates the median capacity deployment of spore technologies."""
     median_deployment = {}
 
@@ -337,7 +387,9 @@ def initialize_weights(configuration: dict) -> dict:
     return weights
 
 
-def calculate_weights_first_iteration(n: pypsa.Network, spores_mode: str, prev_weights: dict):
+def calculate_weights_first_iteration(
+    n: pypsa.Network, spores_mode: str, prev_weights: dict
+):
     """Calculate weights for the first iteration of SPORES based on spores_mode.
 
     This function ensures that we either start with zero weights (intensify) or
@@ -377,7 +429,9 @@ def get_tech_deployment(n: pypsa.Network, spore_techs_dict: dict) -> dict:
         df_name = NOMINAL_ATTRS[component]["dataframe_name"]
         df = getattr(n, df_name)
         capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
-        opt_caps = df[f"{capacity_attr}_opt"][extendable_techs].to_dict()   # pd.Series to dict conversion
+        opt_caps = df[f"{capacity_attr}_opt"][
+            extendable_techs
+        ].to_dict()  # pd.Series to dict conversion
 
         deployment[component] = {capacity_attr: opt_caps}
 
@@ -421,20 +475,29 @@ def validate_spores_configuration(config: dict):
         )
 
     # spores_slack must be between 0 and 1
-    if not isinstance(spores_config["spores_slack"], numbers.Number) or not (0 <= spores_config["spores_slack"] <= 1):
+    if not isinstance(spores_config["spores_slack"], numbers.Number) or not (
+        0 <= spores_config["spores_slack"] <= 1
+    ):
         raise ValueError("'spores_slack' must be a number between 0 and 1.")
 
     # num_spores must be integer >= 1
-    if not isinstance(spores_config["num_spores"], int) or spores_config["num_spores"] < 1:
+    if (
+        not isinstance(spores_config["num_spores"], int)
+        or spores_config["num_spores"] < 1
+    ):
         raise ValueError("'num_spores' must be an integer >= 1.")
 
     # weighting_method must be valid
     if spores_config["weighting_method"] not in WEIGHTING_METHODS:
-        raise ValueError(f"Unsupported {spores_config['weighting_method']=}, must be one of {WEIGHTING_METHODS}.")
+        raise ValueError(
+            f"Unsupported {spores_config['weighting_method']=}, must be one of {WEIGHTING_METHODS}."
+        )
 
     # spores_mode must be valid
     if spores_config["spores_mode"] not in ["diversify", "intensify and diversify"]:
-        raise ValueError("'spores_mode' must be either 'diversify' or 'intensify and diversify'.")
+        raise ValueError(
+            "'spores_mode' must be either 'diversify' or 'intensify and diversify'."
+        )
 
     # diversification_coefficient must be positive number
     diversification_coeff = spores_config["diversification_coefficient"]
@@ -467,14 +530,24 @@ def validate_spores_configuration(config: dict):
         # Extra sanity check: each must have attribute and index keys
         tech_data = tech_top_key[component]
         if "attribute" not in tech_data or not isinstance(tech_data["attribute"], str):
-            raise ValueError(f"Component '{component}' must define an 'attribute' key with a string value.")
-        if "index" not in tech_data or not isinstance(tech_data["index"], list) or not tech_data["index"]:
-            raise ValueError(f"Component '{component}' must define a non-empty 'index' list.")
+            raise ValueError(
+                f"Component '{component}' must define an 'attribute' key with a string value."
+            )
+        if (
+            "index" not in tech_data
+            or not isinstance(tech_data["index"], list)
+            or not tech_data["index"]
+        ):
+            raise ValueError(
+                f"Component '{component}' must define a non-empty 'index' list."
+            )
 
     # If spores_mode is "intensify and diversify", extra checks
     if spores_config["spores_mode"] == "intensify and diversify":
         try:
-            spores_config["intensification_coefficient"] = float(spores_config["intensification_coefficient"])
+            spores_config["intensification_coefficient"] = float(
+                spores_config["intensification_coefficient"]
+            )
         except (KeyError, TypeError, ValueError):
             raise ValueError(
                 "'intensification_coefficient' must be provided as a number for spores_mode 'intensify and diversify'."
@@ -522,7 +595,7 @@ def optimize_model_and_assign_solution_to_network(
 
     if solver_name == "gurobi" and env is not None:
         logger.info("Solving model with Gurobi using a managed environment.")
-        kwargs['env'] = env
+        kwargs["env"] = env
     else:
         logger.info(f"Solving model with {solver_name} without a managed environment.")
 
@@ -534,7 +607,9 @@ def optimize_model_and_assign_solution_to_network(
     return n, m
 
 
-def create_modified_model(n: pypsa.Network, configuration: dict, optimal_cost: float, weights: dict) -> linopy.Model:
+def create_modified_model(
+    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: dict
+) -> linopy.Model:
     """Create the modified model (with the new objective and budget constraint) from the least-cost network."""
     # 1. Access the underlying linopy model of the least-cost pypsa network
     m = n.optimize.create_model()
@@ -544,7 +619,9 @@ def create_modified_model(n: pypsa.Network, configuration: dict, optimal_cost: f
     least_cost_objective = m.objective
     if not isinstance(least_cost_objective, linopy.LinearExpression):
         least_cost_objective = least_cost_objective.expression
-    m.add_constraints(least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint")
+    m.add_constraints(
+        least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint"
+    )
 
     # 3. Modify the objective function
     m = modify_objective(n, m, weights, configuration)
@@ -553,7 +630,11 @@ def create_modified_model(n: pypsa.Network, configuration: dict, optimal_cost: f
 
 
 def modified_model_for_spores_run(
-    n: pypsa.Network, m: linopy.Model, configuration: dict, optimal_cost: float, weights: dict
+    n: pypsa.Network,
+    m: linopy.Model,
+    configuration: dict,
+    optimal_cost: float,
+    weights: dict,
 ) -> linopy.Model:
     """Modify the model given model to add the new objective function and budget constraint."""
     # 1. Add the budget constraint to the model
@@ -561,7 +642,9 @@ def modified_model_for_spores_run(
     least_cost_objective = m.objective
     if not isinstance(least_cost_objective, linopy.LinearExpression):
         least_cost_objective = least_cost_objective.expression
-    m.add_constraints(least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint")
+    m.add_constraints(
+        least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint"
+    )
 
     # 2. Modify the objective function
     m = modify_objective(n, m, weights, configuration)
@@ -569,7 +652,9 @@ def modified_model_for_spores_run(
     return m
 
 
-def modify_objective(n: pypsa.Network, m: linopy.Model, weights: dict, configuration: dict) -> linopy.Model:
+def modify_objective(
+    n: pypsa.Network, m: linopy.Model, weights: dict, configuration: dict
+) -> linopy.Model:
     """Modify the objective function to optimize technology capacities instead of costs."""
     sense = parse_objective_sense(configuration["objective_sense"])
     spores_mode = configuration["spores_mode"]
@@ -583,28 +668,44 @@ def modify_objective(n: pypsa.Network, m: linopy.Model, weights: dict, configura
     for component, comp_info in weights.items():
         for component_attr, tech_weight_dict in comp_info.items():
             if component_attr != NOMINAL_ATTRS[component]["capacity_attribute"]:
-                raise ValueError(f"Unknown capacity attribute {component_attr} for {component}")
+                raise ValueError(
+                    f"Unknown capacity attribute {component_attr} for {component}"
+                )
 
             capacity_variable = m[f"{component}-{component_attr}"]
 
             # Build diversification terms
-            tech_weight_table = pd.Series(tech_weight_dict).reindex(n.get_extendable_i(component)).fillna(0)
-            diversification_final_coeffs = diversification_coeff * tech_weight_table * sense
+            tech_weight_table = (
+                pd.Series(tech_weight_dict)
+                .reindex(n.get_extendable_i(component))
+                .fillna(0)
+            )
+            diversification_final_coeffs = (
+                diversification_coeff * tech_weight_table * sense
+            )
 
             # Build intensification terms
-            intensification_final_coeffs = pd.Series(0.0, index=tech_weight_table.index) # Start with zeros
+            intensification_final_coeffs = pd.Series(
+                0.0, index=tech_weight_table.index
+            )  # Start with zeros
 
             if spores_mode == "intensify and diversify" and intensification_coeff != 0:
-                intensify_mask = tech_weight_table.index.isin(intensifiable_technologies)
+                intensify_mask = tech_weight_table.index.isin(
+                    intensifiable_technologies
+                )
                 intensification_value = intensification_coeff * sense
                 # Apply the value only to the selected technologies
                 intensification_final_coeffs[intensify_mask] = intensification_value
 
             # Add the coefficient Series together first
-            combined_final_coeffs = diversification_final_coeffs + intensification_final_coeffs
+            combined_final_coeffs = (
+                diversification_final_coeffs + intensification_final_coeffs
+            )
 
             # 4. Create a single, clean LinearExpression
-            objective_expressions.append((combined_final_coeffs * capacity_variable).sum())
+            objective_expressions.append(
+                (combined_final_coeffs * capacity_variable).sum()
+            )
 
     m.remove_objective()
     m.objective = sum(objective_expressions)
