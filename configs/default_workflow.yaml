@@ -1,0 +1,164 @@
+# Configuration for running heat-electricity network interaction workflow.
+
+# ============================= Scenario parameters ============================
+scenario_params:
+  name: "demo_run"  # Must be unique if several scenarios will be run (if several workflow configs will be passed)
+  year: 2050  # Year of the data to be used (used as wildcard in data source paths)
+
+
+# ============================== Model parameters ==============================
+model_params:
+  num_snapshots: 8760  # Between 1 to 8760 (full year run)
+  heat_model_mode: "spores"  # least_cost or spores
+  spores_config:
+    # Only used if `heat_model_mode` is "spores". Can be a single yaml file or a folder with multiple yaml files.
+    "configs/spores_configs/default_spores_configs/"
+  solver_options:
+    gurobi: # Can be any solver that works with linopy e.g., highs, glpk, gurobi, etc.
+      # See https://docs.gurobi.com/projects/optimizer/en/current/reference/parameters.html#parameter-reference
+      Method: 2  # Use barrier (interior-point) but do not run simplex in parallel
+      Crossover: 0  # Stop after barrier, do not perform crossover
+      OptimalityTol: 1.e-4
+      FeasibilityTol: 1.e-4
+      BarConvTol: 1.e-5
+      BarHomogeneous: 1  # Use homogeneous barrier if standard does not converge
+      MIPGap: 1.e-2  # Relative MIP gap (1.e-2 = 0.01 = 1%)
+
+# ================================ Data sources ================================
+data_sources:
+  heat_system:
+    static_prices: "data/heat_system/static_prices.csv"
+    electricity_price: "data/heat_system/{year}/electricity_price.csv"  #  Year is a wildcard!
+    hydrogen_price: "data/heat_system/{year}/hydrogen_price.csv"  #  Year is a wildcard!
+    temperature: "data/heat_system/{year}/temperature.csv"  #  Year is a wildcard!
+    solar_availability: "data/heat_system/{year}/solar_thermal.csv"  #  Year is a wildcard!
+    demand: "data/heat_system/{year}/demand_high.csv"  #  Year is a wildcard!
+    network: "data/heat_system/network/greenfield/heat-network.xlsm"
+
+  electricity_system:
+    loads: "data/electricity_system/{year}/power_profiles/loads.csv"  #  Year is a wildcard!
+    network: "data/electricity_system/{year}/network/electricity-network.xlsx"  #  Year is a wildcard!
+
+
+# ============================ Scenario adjustments ============================
+scenario_adjustments:
+  # The demand increase factor for different areas can be set here.
+  heat_demand_settings:
+    denhaag: 3  # Increase demand in The Hague by 200%
+    rotterdam1: 1.3
+    rotterdam2: 1.3
+    tuinders: 1.3
+
+  # Correct heat demand in summer for specific regions by setting it to the minimum
+  # demand value in the entire year to avoid unrealistic peaks in summer.
+  summer_period_demand_correction:
+    months:
+      - July
+      - August
+    decrease_factor:
+      denhaag: 0.2
+      rotterdam1: 0.5
+
+  electricity_price_settings:
+    scaling_factor: 2  # Factor to increase/decrease electricity prices
+    max_price: 2000  # Maximum electricity price (€/MWh) to clip extreme values
+
+  hydrogen_price_settings:
+    scaling_factor: 2.8  # Factor to increase/decrease hydrogen prices
+    max_price: 250  # Maximum hydrogen price (€/MWh) to clip extreme values
+
+  # temperature_settings:
+  #   increase_degree: 0  # Increase temperature by this many degrees Celsius (can be negative for decrease)
+  #   min_temp: -10  # Minimum temperature (°C) to clip extreme values
+  #   max_temp: 50  # Maximum temperature (°C) to clip extreme values
+
+  solar_thermal_settings:
+    scaling_factor: 3000000  # Factor to increase/decrease solar availability
+    max_capacity_factor: 0.95  # Maximum capacity factor (between 0 and 1) to clip extreme values
+
+  static_prices_settings:  # Set absolute values here for energy carriers with static (non-time-varying) prices in €/MWh
+    greengas: 80 
+    waste_material: 30
+    residual_heat: 10
+
+  # The new value of technologies in the network can be set here.
+  assets_value_settings:
+    Link:
+      p_nom_min:
+        pipe_1: 1
+        pipe_2: 1
+        pipe_3: 1
+        pipe_4: 1
+        pipe_5: 1
+        pipe_6: 1
+        pipe_7: 1
+        pipe_8: 1
+        pipe_9: 1
+        pipe_10: 1
+        pipe_11: 1
+        pipe_12: 1
+        pipe_13: 1
+        pipe_14: 1
+        pipe_15: 1
+      
+      p_nom_max:
+        roca_e_boiler: 200
+        rotterdam1_geothermal_2: 150
+        # crplein_greengas_boiler: 50
+        denhaag_greengas_boiler: 250
+        # tuin_tran_greengas_boiler: 10
+        tuinders_greengas_boiler: 125
+        rotterdam1_greengas_boiler: 150
+        roca_greengas_boiler: 200
+        # crplein_h2_boiler: 50
+        # denhaag_h2_boiler: 100
+        # tuin_tran_h2_boiler: 5
+        # tuinders_h2_boiler: 50
+        # rotterdam1_h2_boiler: 50
+        # roca_h2_boiler: 50
+
+      #   pipe_1: 250
+      #   pipe_2: 250
+      #   pipe_3: 250
+      #   pipe_4: 250
+      #   pipe_5: 250
+      #   pipe_6: 250
+      #   pipe_7: 250
+      #   pipe_8: 250
+      #   pipe_9: 250
+      #   pipe_10: 250
+      #   pipe_11: 250
+      #   pipe_12: 250
+      #   pipe_13: 250
+      #   pipe_14: 250
+      #   pipe_15: 250
+
+      # capital_cost:
+      #   crplein_geothermal: 0
+      #   crplein_geothermal_booster: 0
+      #   tuinders_ht_ates_charger: 0
+      #   tuinders_ht_ates_discharger: 0
+
+    Generator:
+      p_nom_max:
+        tuinders_solarthermal: 200
+        indus_waste_heat_point_v: 200
+        indus_waste_heat_rotterdam1: 200
+
+      capital_cost:
+        electricity_supply: 0
+
+    StorageUnit:
+      p_nom_max:
+        cr_plein_storage: 50
+        denhaag_storage: 100
+        tuinders_storage: 50
+        b_triangle_storage: 50
+        rotterdam1_storage: 100
+        roca_storage: 100
+
+    Store:
+      e_nom_max:
+        tuinders_ht_ates_store: 120000
+      # capital_cost:
+      #   tuinders_ht_ates_store: 0
