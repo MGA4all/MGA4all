@@ -9,6 +9,7 @@ description = 'Various Modelling to Generate Alternative schemes for different e
 readme = "README.md"
 requires-python = ">=3.11, <3.14" # upper limit due to gurobipy
 license = "MIT"
+license-files = ["LICENSE", "COPYRIGHT"]
 keywords = [ "energy system", "optimisation", "MGA", "PyPSA", "SPORES", "near optimal" ]
 authors = [
   { name = "Christian Doh Dinga", email = "cdoh@tudelft.nl"},
@@ -21,6 +22,7 @@ classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
