@@ -27,7 +27,7 @@ If you don't want to use `hatch`, create a virtual environment as you
 would, install MGA4all in edit mode:
 
 ```
-$ pip install -e .[pypsa]
+$ pip install -e .
 ```
 
 and run your script as you normally would.

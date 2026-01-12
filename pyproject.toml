@@ -31,6 +31,7 @@ dependencies = [
   "highspy",
   "numpy",
   "pandas",
+  "mga4all[pypsa]",
 ]
 
 [project.optional-dependencies]
@@ -38,11 +39,19 @@ pypsa = [
   "pypsa",
   "linopy",
 ]
+
+[dependency-groups]
 dev = [
   "coverage[toml]",
   "pytest",
   "pytest-cov",
   "pytest-mock",
+]
+docs = [
+  "numpydoc",
+  "pydata-sphinx-theme",
+  "sphinx",
+  "sphinx-autoapi",
 ]
 typing = [
   "mypy>=1.0.0",
@@ -78,12 +87,16 @@ features = [
 [tool.hatch.envs.test]
 features = [
   "pypsa",
+]
+dependency-groups = [
   "dev",
 ]
 
 [tool.hatch.envs.types]
 features = [
   "pypsa",
+]
+dependency-groups = [
   "dev",
   "typing",
 ]
@@ -105,11 +118,8 @@ dependencies = [
 features = [
   "pypsa",
 ]
-extra-dependencies = [
-    "numpydoc",
-    "pydata-sphinx-theme",
-    "sphinx",
-    "sphinx-autoapi",
+dependency-groups = [
+  "docs",
 ]
 
 [tool.pytest.ini_options]
