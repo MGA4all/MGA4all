@@ -1,6 +1,8 @@
 import pandas as pd
 import pytest
 
+from mga4all.examples import create_pypsa_network
+
 
 @pytest.fixture(scope="module")
 def spore_techs_dict():
@@ -14,6 +16,11 @@ def spore_techs_dict():
             }
         }
     }
+
+
+@pytest.fixture(scope="module")
+def pypsa_network():
+    yield create_pypsa_network()
 
 
 def assert_nested_dict_approx(d1, d2):
