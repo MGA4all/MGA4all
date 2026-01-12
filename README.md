@@ -31,3 +31,16 @@ $ pip install -e .[pypsa]
 ```
 
 and run your script as you normally would.
+
+### Testing with included examples
+
+MGA4All also includes a submodule with an example PyPSA network.  A
+user can use this model interactively while working with MGA4All in a
+Python shell.
+
+```
+>>> from mga4all.spores import run_spores
+>>> from mga4all.examples import create_pypsa_network
+>>> mynetwork = create_pypsa_network()
+>>> result = run_spores(mynetwork, ...)
+```
