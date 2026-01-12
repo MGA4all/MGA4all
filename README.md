@@ -13,8 +13,8 @@ We separate out the modelling backends into optional groups
 (e.g. `pypsa`).  So depending on the model someone wants to work with,
 you have to choose the appropriate backend.
 
-We prefer using [`hatch`](https://hatch.pypa.io/latest/install/) to create/manage necessary environments and
-run commands
+We prefer using [`hatch`](https://hatch.pypa.io/latest/install/)
+(>=1.16) to create/manage necessary environments and run commands
 
 ```
 $ hatch run <command> [options]
