@@ -41,7 +41,7 @@ def create_pypsa_network(num_snapshots=24) -> pypsa.Network:
         marginal_cost=0,
     )
 
-    # Add load at one bus2
+    # Add load at bus2
     example_network.add(
         "Load",
         "demand",
