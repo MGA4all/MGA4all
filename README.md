@@ -35,12 +35,21 @@ and run your script as you normally would.
 ### Testing with included examples
 
 MGA4All also includes a submodule with an example PyPSA network.  A
-user can use this model interactively while working with MGA4All in a
-Python shell.
+user can use this model for testing while working with MGA4All
+interactively in a Python shell.
 
-```
->>> from mga4all.spores import run_spores
->>> from mga4all.examples import create_pypsa_network
->>> mynetwork = create_pypsa_network()
->>> result = run_spores(mynetwork, ...)
+```python
+import yaml
+
+from mga4all.spores import run_spores
+from mga4all.examples import create_pypsa_network
+
+solver_options = {"highs": {}}
+with open("configs/spores_configs/test_spores_configs/test_diversify.yaml") as yf:
+    test_config = yaml.safe_load(yf)
+
+mynetwork = create_pypsa_network()
+mynetwork.optimize()
+
+result = run_spores(mynetwork, test_config, solver_options)
 ```
