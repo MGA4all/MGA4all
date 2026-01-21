@@ -1,0 +1,28 @@
+# yaml configuration file for running SPORES
+SPORES:
+  config_name: "diversify_all"
+  objective_sense: min
+  spores_slack: 0.3
+  num_spores: 5
+  weighting_method: "relative_deployment"
+  spores_mode: "diversify"  # Should be either "diversify" or "intensify and diversify"
+  diversification_coefficient: 1  # Must be a positive number.
+  spore_technologies: # Target technologies when running SPORES.
+    - Generator:
+        attribute: p_nom
+        index:
+          - OCGT
+          - wind_bus1
+          - wind_bus2
+          - solar_bus1
+          - solar_bus2
+    - StorageUnit:
+        attribute: p_nom
+        index:
+          - battery_bus1
+          - battery_bus2
+    - Line:
+        attribute: s_nom
+        index:
+          - line
+
