@@ -8,6 +8,7 @@ import linopy
 import numpy as np
 import pandas as pd
 import pypsa
+import xarray as xr
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -436,6 +437,30 @@ def get_tech_deployment(n: pypsa.Network, spore_techs_dict: dict) -> dict:
         deployment[component] = {capacity_attr: opt_caps}
 
     return deployment
+
+
+def get_tech_deployment_xarray(n: pypsa.Network, spore_techs_dict: dict) -> xr.DataArray:
+    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
+    series_to_concat, keys_for_concat = [], []
+
+    for component in spore_techs_dict.keys():
+        extendable_techs = n.get_extendable_i(component)
+        if extendable_techs.empty:
+            continue
+
+        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
+        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
+
+        df = getattr(n, df_name)
+        capacities_series = df[f"{capacity_attr}_opt"][extendable_techs]
+
+        series_to_concat.append(capacities_series)
+        # 'extendable_techs' pd.Series already has 'asset' coordinate value, add component and attribute
+        keys_for_concat.append((component, capacity_attr))
+
+    # TODO: confirm level/coordinate name "asset"
+    full_multiindex_series = pd.concat(series_to_concat, keys=keys_for_concat, names=["component", "attribute", "asset"])
+    return full_multiindex_series.to_xarray()
 
 
 def validate_spores_configuration(config: dict):
