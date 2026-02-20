@@ -5,7 +5,7 @@ from .conftest import MockPypsaNetwork, assert_nested_dict_approx
 
 from mga4all.spores import (
     calculate_median_deployment,
-    calculate_weights_evolving_median,
+    calculate_weights_evolving,
 )
 
 
@@ -74,8 +74,8 @@ def test_calculate_weights_evolving_median_basic_scenario(spore_techs_dict):
         }
     }
 
-    actual = calculate_weights_evolving_median(
-        latest_spore_mock, history, spore_techs_dict
+    actual = calculate_weights_evolving(
+        latest_spore_mock, history, spore_techs_dict, calculate_median_deployment
     )
     assert_nested_dict_approx(actual, expected)
 
@@ -102,8 +102,8 @@ def test_calculate_weights_evolving_median_robust_zero_median(spore_techs_dict):
         }
     }
 
-    actual = calculate_weights_evolving_median(
-        latest_spore_mock, history, spore_techs_dict
+    actual = calculate_weights_evolving(
+        latest_spore_mock, history, spore_techs_dict, calculate_median_deployment
     )
     assert_nested_dict_approx(actual, expected)
 
@@ -129,7 +129,7 @@ def test_calculate_weights_evolving_median_latest_is_zero(spore_techs_dict):
         }
     }
 
-    actual = calculate_weights_evolving_median(
-        latest_spore_mock, history, spore_techs_dict
+    actual = calculate_weights_evolving(
+        latest_spore_mock, history, spore_techs_dict, calculate_median_deployment
     )
     assert_nested_dict_approx(actual, expected)

@@ -2,12 +2,14 @@ import logging
 import numbers
 import random
 import statistics
+from typing import Callable
 
 import gurobipy as gp
 import linopy
 import numpy as np
 import pandas as pd
 import pypsa
+import xarray as xr
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -119,13 +121,19 @@ def run_spores(
                 )
 
             elif weighting_method == "evolving_median":
-                new_weights = calculate_weights_evolving_median(
-                    prev_spore, deploy_his, spore_techs_dict
+                new_weights = calculate_weights_evolving(
+                    prev_spore,
+                    deploy_his,
+                    spore_techs_dict,
+                    calculate_median_deployment,
                 )
 
             elif weighting_method == "evolving_average":
-                new_weights = calculate_weights_evolving_average(
-                    prev_spore, deploy_his, spore_techs_dict
+                new_weights = calculate_weights_evolving(
+                    prev_spore,
+                    deploy_his,
+                    spore_techs_dict,
+                    calculate_average_deployment,
                 )
 
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
@@ -203,93 +211,45 @@ def calculate_weights_relative_deployment_normalized(
     return new_weights
 
 
-def calculate_weights_evolving_median(
+def calculate_weights_evolving(
     latest_spore: pypsa.Network,
     deployment_history: list[dict],
     spore_techs_dict: dict,
+    calculate_deployment: Callable,
     clip_min: float = 0.001,
 ) -> dict:
-    """Calculates weights based on the reciprocal of the relative distance from the evolving median capacity.
+    """Calculates weights based on the reciprocal of the relative distance from the evolving median or average capacity.
 
-    This weighting method uses the median instead of the average, so that the weights are not skewed by a single outlier
+    Weighting can be done using average or median, depending on which function is given for `calculate_deployment`.
+
+    When the median instead of the average is used for the weighting method, the weights are not skewed by an outlier
     spore that might have had an unusually large deployment of a specific technology. For example, if the deploy_his for
     a tech is [0, 0, 0, 0, 1000], the average would be 200. A new solution with 0 deployment would be penalized. While
     the median would be 0. A new solution with 0 deployment would get a weight of 0, identifying it as an underexplored.
     """
-    median_deployment = calculate_median_deployment(
-        deployment_history, spore_techs_dict
-    )
+    deployment = calculate_deployment(deployment_history, spore_techs_dict)
     latest_deployment = get_tech_deployment(latest_spore, spore_techs_dict)
-
     new_weights = {}
-
-    for component, attrs in median_deployment.items():
+    for component, attrs in deployment.items():
         new_weights.setdefault(component, {})
-
-        for attr, techs_median_deployment_map in attrs.items():
+        for attr, techs_deployment_map in attrs.items():
             new_weights[component].setdefault(attr, {})
-
-            for tech, median_deployed_cap in techs_median_deployment_map.items():
+            for tech, deployed_cap in techs_deployment_map.items():
                 latest_deployed_cap = (
                     latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
                 )
 
-                if median_deployed_cap > 0:
+                if deployed_cap > 0:
                     relative_change = (
-                        abs(latest_deployed_cap - median_deployed_cap)
-                        / median_deployed_cap
+                        abs(latest_deployed_cap - deployed_cap) / deployed_cap
                     )
 
                     # If the relative_change is 0 (latest_deployed_cap == median), we give the relative_change a small
                     # value which will give it a large penalty (weight) since we take the reciprocal of the change.
                     weight = 1 / max(relative_change, clip_min)
 
-                elif median_deployed_cap == 0:
-                    # If the median_deployed_cap is 0, we want to encourage the deployment of this technology.
-                    weight = 0.0
-
-                new_weights[component][attr][tech] = weight
-
-    return new_weights
-
-
-def calculate_weights_evolving_average(
-    latest_spore: pypsa.Network,
-    deployment_history: list[dict],
-    spore_techs_dict: dict,
-    clip_min: float = 0.001,
-) -> dict:
-    """Calculates weights based on the reciprocal of the relative distance from the evolving average capacity."""
-    average_deployment = calculate_average_deployment(
-        deployment_history, spore_techs_dict
-    )
-    latest_deployment = get_tech_deployment(latest_spore, spore_techs_dict)
-
-    new_weights = {}
-
-    for component, attrs in average_deployment.items():
-        new_weights.setdefault(component, {})
-
-        for attr, techs_average_deployment_map in attrs.items():
-            new_weights[component].setdefault(attr, {})
-
-            for tech, average_deployed_cap in techs_average_deployment_map.items():
-                latest_deployed_cap = (
-                    latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
-                )
-
-                if average_deployed_cap > 0:
-                    relative_change = (
-                        abs(latest_deployed_cap - average_deployed_cap)
-                        / average_deployed_cap
-                    )
-
-                    # If the relative_change is 0 (latest_deployed_cap == average), we give the relative_change a small
-                    # value which will give it a large penalty (weight) since we take the reciprocal of the change.
-                    weight = 1 / max(relative_change, clip_min)
-
-                elif average_deployed_cap == 0:
-                    # If the average_deployed_cap is 0, we want to encourage the deployment of this technology.
+                elif deployed_cap == 0:
+                    # If the deployed_cap is 0, we want to encourage the deployment of this technology.
                     weight = 0.0
 
                 new_weights[component][attr][tech] = weight
@@ -436,6 +396,30 @@ def get_tech_deployment(n: pypsa.Network, spore_techs_dict: dict) -> dict:
         deployment[component] = {capacity_attr: opt_caps}
 
     return deployment
+
+
+def get_tech_deployment_xarray(n: pypsa.Network, spore_techs_dict: dict) -> xr.DataArray:
+    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
+    series_to_concat, keys_for_concat = [], []
+
+    for component in spore_techs_dict.keys():
+        extendable_techs = n.get_extendable_i(component)
+        if extendable_techs.empty:
+            continue
+
+        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
+        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
+
+        df = getattr(n, df_name)
+        capacities_series = df[f"{capacity_attr}_opt"][extendable_techs]
+
+        series_to_concat.append(capacities_series)
+        # 'extendable_techs' pd.Series already has 'asset' coordinate value, add component and attribute
+        keys_for_concat.append((component, capacity_attr))
+
+    # TODO: confirm level/coordinate name "asset"
+    full_multiindex_series = pd.concat(series_to_concat, keys=keys_for_concat, names=["component", "attribute", "asset"])
+    return full_multiindex_series.to_xarray()
 
 
 def validate_spores_configuration(config: dict):

@@ -4,7 +4,7 @@ from .conftest import MockPypsaNetwork, assert_nested_dict_approx
 
 from mga4all.spores import (
     calculate_average_deployment,
-    calculate_weights_evolving_average,
+    calculate_weights_evolving,
     get_tech_deployment,
 )
 
@@ -64,8 +64,8 @@ def test_evolving_average_basic_scenario_absolute(spore_techs_dict):
     # Correcting solar calculation
     expected["Generator"]["p_nom"]["solar"] = 5.0
 
-    actual = calculate_weights_evolving_average(
-        latest_spore_mock, history, spore_techs_dict
+    actual = calculate_weights_evolving(
+        latest_spore_mock, history, spore_techs_dict, calculate_average_deployment
     )
     assert_nested_dict_approx(actual, expected)
 
@@ -88,8 +88,8 @@ def test_evolving_average_robust_zero_average_absolute(spore_techs_dict):
         }
     }
 
-    actual = calculate_weights_evolving_average(
-        latest_spore_mock, history, spore_techs_dict
+    actual = calculate_weights_evolving(
+        latest_spore_mock, history, spore_techs_dict, calculate_average_deployment
     )
     assert_nested_dict_approx(actual, expected)
 
@@ -115,7 +115,7 @@ def test_evolving_average_latest_is_zero_absolute(spore_techs_dict):
         }
     }
 
-    actual = calculate_weights_evolving_average(
-        latest_spore_mock, history, spore_techs_dict
+    actual = calculate_weights_evolving(
+        latest_spore_mock, history, spore_techs_dict, calculate_average_deployment
     )
     assert_nested_dict_approx(actual, expected)
