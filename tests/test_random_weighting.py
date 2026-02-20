@@ -21,9 +21,9 @@ def assert_random_weights_properties(result_dict, template_dict, upper_bound):
             # 2. Check that the final value is a float
             assert isinstance(value, float), f"Value for key '{key}' is not a float"
             # 3. Check that the value is within the specified range
-            assert (
-                0 <= value <= upper_bound
-            ), f"Value {value} is out of range [0, {upper_bound}]"
+            assert 0 <= value <= upper_bound, (
+                f"Value {value} is out of range [0, {upper_bound}]"
+            )
 
 
 def test_calculate_weights_random_basic_case(spore_techs_dict):
