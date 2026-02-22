@@ -347,6 +347,19 @@ def initialize_weights(configuration: dict) -> dict:
     return weights
 
 
+def initialize_weights_xarray(configuration: dict) -> xr.DataArray:
+    """Initialize the weights of all extendable technologies in the network."""
+    entries = [
+        (component_name, component_info["attribute"], asset, 0)
+        for technology in configuration["spore_technologies"]
+        for component_name, component_info in technology.items()
+        for asset in component_info["index"]
+    ]
+    column_names = ["component", "attribute", "asset", "weight"]
+    df = pd.DataFrame.from_records(entries, columns=column_names, index=column_names[:3])
+    return df["weight"].to_xarray()
+
+
 def calculate_weights_first_iteration(
     n: pypsa.Network, spores_mode: str, prev_weights: dict
 ):
