@@ -86,21 +86,3 @@ def test_modify_objective_maximization_sense():
     )
     expected_expr = (expected_coeffs * capacity_vars).sum()
     assert_linequal(m.objective.expression, expected_expr)
-
-
-def test_modify_objective_raises_error_on_bad_attribute():
-    """Tests that a ValueError is raised for an incorrect capacity attribute in the weights."""
-    n, m = setup_model_and_network()
-
-    # Using 'p_nom_min' which is not the defined capacity attribute for Generator
-    bad_weights = {"Generator": {"p_nom_min": {"solar": 0.5}}}
-    config = {
-        "objective_sense": "min",
-        "spores_mode": "diversify",
-        "diversification_coefficient": 10,
-    }
-
-    with pytest.raises(
-        ValueError, match="Unknown capacity attribute p_nom_min for Generator"
-    ):
-        modify_objective(n, m, bad_weights, config)

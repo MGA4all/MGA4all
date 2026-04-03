@@ -15,13 +15,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-NOMINAL_ATTRS = {
-    "Generator": {"dataframe_name": "generators", "capacity_attribute": "p_nom"},
-    "Line": {"dataframe_name": "lines", "capacity_attribute": "s_nom"},
-    "Transformer": {"dataframe_name": "transformers", "capacity_attribute": "s_nom"},
-    "Link": {"dataframe_name": "links", "capacity_attribute": "p_nom"},
-    "Store": {"dataframe_name": "stores", "capacity_attribute": "e_nom"},
-    "StorageUnit": {"dataframe_name": "storage_units", "capacity_attribute": "p_nom"},
+PYPSA_DATAFRAME_NAMES = {
+    "Generator": "generators",
+    "Line": "lines",
+    "Transformer": "transformers",
+    "Link": "links",
+    "Store": "stores",
+    "StorageUnit": "storage_units",
 }
 
 WEIGHTING_METHODS = [
@@ -269,9 +269,9 @@ def calculate_relative_deployment(
         if extendable_techs.empty:
             continue
 
-        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
+        df_name = PYPSA_DATAFRAME_NAMES[component]
         df = getattr(n, df_name)
-        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
+        capacity_attr = list(attrs.keys())[0]
         max_caps = df[f"{capacity_attr}_max"][extendable_techs]
         max_caps = max_caps.replace(np.inf, bigM)
         opt_caps = df[f"{capacity_attr}_opt"][extendable_techs]
@@ -399,9 +399,9 @@ def get_tech_deployment(n: pypsa.Network, spore_techs_dict: dict) -> dict:
         if extendable_techs.empty:
             continue
 
-        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
+        df_name = PYPSA_DATAFRAME_NAMES[component]
         df = getattr(n, df_name)
-        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
+        capacity_attr = list(attrs.keys())[0]
         opt_caps = df[f"{capacity_attr}_opt"][
             extendable_techs
         ].to_dict()  # pd.Series to dict conversion
@@ -417,13 +417,13 @@ def get_tech_deployment_xarray(
     """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
     series_to_concat, keys_for_concat = [], []
 
-    for component in spore_techs_dict.keys():
+    for component, attrs in spore_techs_dict.items():
         extendable_techs = n.get_extendable_i(component)
         if extendable_techs.empty:
             continue
 
-        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
-        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
+        df_name = PYPSA_DATAFRAME_NAMES[component]
+        capacity_attr = list(attrs.keys())[0]
 
         df = getattr(n, df_name)
         capacities_series = df[f"{capacity_attr}_opt"][extendable_techs]
@@ -518,7 +518,7 @@ def validate_spores_configuration(config: dict):
         raise ValueError("'spore_technologies' must be a non-empty list.")
 
     # Keys of spore_technologies must be in valid_tech_type
-    valid_tech_type = NOMINAL_ATTRS.keys()
+    valid_tech_type = PYPSA_DATAFRAME_NAMES.keys()
     for tech_top_key in spore_technologies:
         if not isinstance(tech_top_key, dict) or len(tech_top_key) != 1:
             raise ValueError(
@@ -670,10 +670,6 @@ def modify_objective(
     objective_expressions = []
     for component, comp_info in weights.items():
         for component_attr, tech_weight_dict in comp_info.items():
-            if component_attr != NOMINAL_ATTRS[component]["capacity_attribute"]:
-                raise ValueError(
-                    f"Unknown capacity attribute {component_attr} for {component}"
-                )
 
             capacity_variable = m[f"{component}-{component_attr}"]
 
