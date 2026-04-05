@@ -1,6 +1,5 @@
 import linopy
 import pandas as pd
-import pytest
 from .conftest import MockPypsaNetwork
 from linopy.testing import assert_linequal
 

@@ -20,7 +20,7 @@ def spores_run_env_factory(mocker):
                 "num_spores": 5,  # Keep this low for a fast test
                 "spores_mode": "diversify",
                 "weighting_method": weighting_method_to_test,
-                "spore_techs": {},  # Add dummy value to satisfy validation
+                "spore_technologies": {},  # Add dummy value to satisfy validation
             }
         }
 
@@ -72,7 +72,7 @@ def spores_run_env_factory(mocker):
                 return_value={"rel_deploy_norm": "weights"},
             ),
             "random": mocker.patch(
-                "mga4all.spores.calculate_weights_random",
+                "mga4all.spores.set_weights_random",
                 return_value={"random": "weights"},
             ),
             "evolving_average": mocker.patch(
