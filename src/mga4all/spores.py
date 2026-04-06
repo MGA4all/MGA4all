@@ -37,7 +37,10 @@ def run_spores(
     weighting_method: str | None = None,
     upper_bound: int = 100,
 ) -> tuple[
-    dict[str, pypsa.Network], dict[str, dict], dict[str, linopy.Model], list[dict]
+    dict[str, pypsa.Network],
+    dict[str, pd.Series],
+    dict[str, linopy.Model],
+    list[pd.Series],
 ]:
     """Run the SPORES optimization to generate multiple near-optimal solutions."""
     # Validate the SPORES configuration.
@@ -215,9 +218,9 @@ def calculate_relative_deployment(
     for component, capacity_attr, asset in spore_tech_indices:
         df_name = PYPSA_DATAFRAME_NAMES[component]
         df = getattr(n, df_name)
-        max_caps = min(
-            df[f"{capacity_attr}_max"][asset], bigM
-        )  # set actual value in case max is infinite
+
+        # set actual value in case max is infinite
+        max_caps = min(df[f"{capacity_attr}_max"][asset], bigM)
         opt_caps = df[f"{capacity_attr}_opt"][asset]
         relative_deployment.append(opt_caps / max_caps)
 
@@ -249,7 +252,7 @@ def get_tech_multi_index(configuration: dict) -> pd.MultiIndex:
 
 def initialize_weights(indices: pd.MultiIndex) -> pd.Series:
     """Initialize the weights of all extendable technologies in the network."""
-    return pd.Series([0] * len(indices), index=indices, name="weights")
+    return pd.Series(0.0, index=indices, name="weights")
 
 
 def set_weights_random(
@@ -473,7 +476,7 @@ def optimize_model_and_assign_solution_to_network(
 
 
 def create_modified_model(
-    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: dict
+    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: pd.Series
 ) -> linopy.Model:
     """Create the modified model (with the new objective and budget constraint) from the least-cost network."""
     # 1. Access the underlying linopy model of the least-cost pypsa network
@@ -499,7 +502,7 @@ def modified_model_for_spores_run(
     m: linopy.Model,
     configuration: dict,
     optimal_cost: float,
-    weights: dict,
+    weights: pd.Series,
 ) -> linopy.Model:
     """Modify the model given model to add the new objective function and budget constraint."""
     # 1. Add the budget constraint to the model
@@ -518,7 +521,7 @@ def modified_model_for_spores_run(
 
 
 def modify_objective(
-    n: pypsa.Network, m: linopy.Model, weights: dict, configuration: dict
+    n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: dict
 ) -> linopy.Model:
     """Modify the objective function to optimize technology capacities instead of costs."""
     sense = parse_objective_sense(configuration["objective_sense"])
@@ -529,43 +532,36 @@ def modify_objective(
         intensification_coeff = float(intensification_coeff)
     intensifiable_technologies = configuration.get("intensifiable_technologies")
 
+    group_levels = ["component", "attribute"]
     objective_expressions = []
-    for component, comp_info in weights.items():
-        for component_attr, tech_weight_dict in comp_info.items():
-            capacity_variable = m[f"{component}-{component_attr}"]
+    for (component, attribute), tech_weight in weights.groupby(level=group_levels):
+        # The group-name index levels are still present with a single index value
+        tech_weight.index = tech_weight.index.droplevel(group_levels)
 
-            # Build diversification terms
-            tech_weight_table = (
-                pd.Series(tech_weight_dict)
-                .reindex(n.get_extendable_i(component))
-                .fillna(0)
-            )
-            diversification_final_coeffs = (
-                diversification_coeff * tech_weight_table * sense
-            )
+        # If the index of `tech_weight` has a name, it won't match an unnamed index elsewhere,
+        # which would result in n^2 expression elements instead of just n
+        tech_weight.index.name = None
 
-            # Build intensification terms
-            intensification_final_coeffs = pd.Series(
-                0.0, index=tech_weight_table.index
-            )  # Start with zeros
+        capacity_variable = m[f"{component}-{attribute}"]
 
-            if spores_mode == "intensify and diversify" and intensification_coeff != 0:
-                intensify_mask = tech_weight_table.index.isin(
-                    intensifiable_technologies
-                )
-                intensification_value = intensification_coeff * sense
-                # Apply the value only to the selected technologies
-                intensification_final_coeffs[intensify_mask] = intensification_value
+        diversification_final_coeffs = diversification_coeff * tech_weight * sense
 
-            # Add the coefficient Series together first
-            combined_final_coeffs = (
-                diversification_final_coeffs + intensification_final_coeffs
-            )
+        # Build intensification terms, starting with zeros
+        intensification_final_coeffs = pd.Series(0.0, index=tech_weight.index)
 
-            # 4. Create a single, clean LinearExpression
-            objective_expressions.append(
-                (combined_final_coeffs * capacity_variable).sum()
-            )
+        if spores_mode == "intensify and diversify" and intensification_coeff != 0:
+            intensify_mask = tech_weight.index.isin(intensifiable_technologies)
+            intensification_value = intensification_coeff * sense
+            # Apply the value only to the selected technologies
+            intensification_final_coeffs[intensify_mask] = intensification_value
+
+        # Add the coefficient Series together first
+        combined_final_coeffs = (
+            diversification_final_coeffs + intensification_final_coeffs
+        )
+
+        # 4. Create a single, clean LinearExpression
+        objective_expressions.append((combined_final_coeffs * capacity_variable).sum())
 
     m.remove_objective()
     m.objective = sum(objective_expressions)

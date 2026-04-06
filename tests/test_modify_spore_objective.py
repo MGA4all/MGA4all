@@ -21,10 +21,10 @@ def setup_model_and_network():
     return n, m
 
 
-def test_modify_objective_diversify_only():
+def test_modify_objective_diversify_only(spore_tech_indices):
     """Tests the standard 'diversify' mode. The objective should only include the diversification term."""
     n, m = setup_model_and_network()
-    weights = {"Generator": {"p_nom": {"solar": 0.5, "wind": 1.0}}}
+    weights = pd.Series([0.5, 1.0, 0.0], index=spore_tech_indices)
     config = {
         "objective_sense": "min",
         "spores_mode": "diversify",
@@ -49,10 +49,10 @@ def test_modify_objective_diversify_only():
     assert_linequal(m.objective.expression, expected_expr)
 
 
-def test_modify_objective_intensify_and_diversify():
+def test_modify_objective_intensify_and_diversify(spore_tech_indices):
     """Tests 'intensify and diversify' mode. The objective should include both terms."""
     n, m = setup_model_and_network()
-    weights = {"Generator": {"p_nom": {"solar": 0.5, "wind": 1.0, "gas": 0.2}}}
+    weights = pd.Series([0.5, 1.0, 0.2], index=spore_tech_indices)
     config = {
         "objective_sense": "min",
         "spores_mode": "intensify and diversify",
@@ -69,10 +69,10 @@ def test_modify_objective_intensify_and_diversify():
     assert_linequal(m.objective.expression, expected_expr)
 
 
-def test_modify_objective_maximization_sense():
+def test_modify_objective_maximization_sense(spore_tech_indices):
     """Tests that an 'objective_sense' of 'max' correctly negates the coefficients."""
     n, m = setup_model_and_network()
-    weights = {"Generator": {"p_nom": {"solar": 0.5, "wind": 1.0}}}
+    weights = pd.Series([0.5, 1.0, 0.0], index=spore_tech_indices)
     config = {
         "objective_sense": "max",
         "spores_mode": "diversify",
