@@ -21,13 +21,15 @@ PYPSA_DATAFRAME_NAMES = {
     "StorageUnit": "storage_units",
 }
 
-WEIGHTING_METHODS = [
-    "random",
-    "evolving_median",
-    "evolving_average",
-    "relative_deployment",
-    "relative_deployment_normalized",
-]
+WEIGHTING_METHODS = frozenset(
+    [
+        "random",
+        "evolving_median",
+        "evolving_average",
+        "relative_deployment",
+        "relative_deployment_normalized",
+    ]
+)
 
 
 def run_spores(
