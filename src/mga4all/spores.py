@@ -148,6 +148,63 @@ def run_spores(
     return spore_networks, weights, spore_models, deploy_his
 
 
+def get_tech_multi_index(configuration: dict) -> pd.MultiIndex:
+    """Unpack the spore technologies information into a flat datastructure."""
+    entries = [
+        (component_name, component_info["attribute"], asset)
+        for technology in configuration["spore_technologies"]
+        for component_name, component_info in technology.items()
+        for asset in component_info["index"]
+    ]
+    return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
+
+
+def initialize_weights(indices: pd.MultiIndex) -> pd.Series:
+    """Initialize the weights of all extendable technologies in the network."""
+    return pd.Series(0.0, index=indices, name="weights")
+
+
+def set_weights_random(
+    spore_techs_indices: pd.MultiIndex, upper_bound: int
+) -> pd.Series:
+    """Generates new weights using random numbers from a uniform distribution between 0 and upper_bound."""
+    rng = np.random.default_rng()
+    weights = rng.uniform(0, upper_bound, len(spore_techs_indices))
+    return pd.Series(weights, index=spore_techs_indices, name="weights")
+
+
+def get_tech_deployment(
+    n: pypsa.Network, spore_tech_indices: pd.MultiIndex
+) -> pd.Series:
+    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
+    deployment_values = []
+    for component, capacity_attr, asset in spore_tech_indices:
+        df_name = PYPSA_DATAFRAME_NAMES[component]
+        df = getattr(n, df_name)
+        deployment_values.append(df[f"{capacity_attr}_opt"][asset])
+
+    return pd.Series(deployment_values, index=spore_tech_indices, name="deployment")
+
+
+def calculate_relative_deployment(
+    n: pypsa.Network, spore_tech_indices: pd.MultiIndex, bigM: float = 1e10
+) -> pd.Series:
+    """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
+    relative_deployment = []
+    for component, capacity_attr, asset in spore_tech_indices:
+        df_name = PYPSA_DATAFRAME_NAMES[component]
+        df = getattr(n, df_name)
+
+        # set actual value in case max is infinite
+        max_caps = min(df[f"{capacity_attr}_max"][asset], bigM)
+        opt_caps = df[f"{capacity_attr}_opt"][asset]
+        relative_deployment.append(opt_caps / max_caps)
+
+    return pd.Series(
+        relative_deployment, index=spore_tech_indices, name="relative deployment"
+    )
+
+
 def calculate_weights_relative_deployment(
     n: pypsa.Network, prev_weights: pd.Series
 ) -> pd.Series:
@@ -210,60 +267,6 @@ def calculate_weights_evolving(
     return new_weights
 
 
-def calculate_relative_deployment(
-    n: pypsa.Network, spore_tech_indices: pd.MultiIndex, bigM: float = 1e10
-) -> pd.Series:
-    """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
-    relative_deployment = []
-    for component, capacity_attr, asset in spore_tech_indices:
-        df_name = PYPSA_DATAFRAME_NAMES[component]
-        df = getattr(n, df_name)
-
-        # set actual value in case max is infinite
-        max_caps = min(df[f"{capacity_attr}_max"][asset], bigM)
-        opt_caps = df[f"{capacity_attr}_opt"][asset]
-        relative_deployment.append(opt_caps / max_caps)
-
-    return pd.Series(
-        relative_deployment, index=spore_tech_indices, name="relative deployment"
-    )
-
-
-def calculate_average_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
-    """Calculates the average capacity deployment of spore technologies."""
-    return pd.concat(deployment_history, axis="columns").mean(axis=1)
-
-
-def calculate_median_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
-    """Calculates the median capacity deployment of spore technologies."""
-    return pd.concat(deployment_history, axis="columns").median(axis=1)
-
-
-def get_tech_multi_index(configuration: dict) -> pd.MultiIndex:
-    """Unpack the spore technologies information into a flat datastructure."""
-    entries = [
-        (component_name, component_info["attribute"], asset)
-        for technology in configuration["spore_technologies"]
-        for component_name, component_info in technology.items()
-        for asset in component_info["index"]
-    ]
-    return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
-
-
-def initialize_weights(indices: pd.MultiIndex) -> pd.Series:
-    """Initialize the weights of all extendable technologies in the network."""
-    return pd.Series(0.0, index=indices, name="weights")
-
-
-def set_weights_random(
-    spore_techs_indices: pd.MultiIndex, upper_bound: int
-) -> pd.Series:
-    """Generates new weights using random numbers from a uniform distribution between 0 and upper_bound."""
-    rng = np.random.default_rng()
-    weights = rng.uniform(0, upper_bound, len(spore_techs_indices))
-    return pd.Series(weights, index=spore_techs_indices, name="weights")
-
-
 def calculate_weights_first_iteration(
     n: pypsa.Network, spores_mode: str, prev_weights: pd.Series
 ) -> pd.Series:
@@ -291,19 +294,6 @@ def calculate_weights_first_iteration(
         return prev_weights
 
     return calculate_weights_relative_deployment(n, prev_weights)
-
-
-def get_tech_deployment(
-    n: pypsa.Network, spore_tech_indices: pd.MultiIndex
-) -> pd.Series:
-    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
-    deployment_values = []
-    for component, capacity_attr, asset in spore_tech_indices:
-        df_name = PYPSA_DATAFRAME_NAMES[component]
-        df = getattr(n, df_name)
-        deployment_values.append(df[f"{capacity_attr}_opt"][asset])
-
-    return pd.Series(deployment_values, index=spore_tech_indices, name="deployment")
 
 
 def validate_spores_configuration(config: dict):
