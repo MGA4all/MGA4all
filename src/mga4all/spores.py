@@ -39,9 +39,7 @@ def run_spores(
     weighting_method: str | None = None,
     upper_bound: int = 100,
 ) -> tuple[
-    dict[str, pypsa.Network],
-    dict[str, pd.Series],
-    dict[str, linopy.Model],
+    list[tuple[pypsa.Network, pd.Series, linopy.Model]],
     list[pd.Series],
 ]:
     """Run the SPORES optimization to generate multiple near-optimal solutions."""
@@ -73,9 +71,7 @@ def run_spores(
     )
 
     # Initialize collectors to store results/history
-    spore_networks = {}
-    weights_history = {}
-    spore_models = {}
+    history = []
 
     # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
     # solution's deployment so that it has a memory of the original least-cost solution.
@@ -87,8 +83,8 @@ def run_spores(
         least_cost_network.model.solver_model = None
 
     # Run SPORES
-    for i in range(1, config_data["num_spores"] + 1):
-        if i == 1:
+    for i in range(config_data["num_spores"]):
+        if i == 0:
             # Previous weights are needed for the relative_deployment weighting methods.
             prev_weights = initialize_weights(asset_indices)
 
@@ -109,10 +105,9 @@ def run_spores(
                     "relative_deployment",
                     "relative_deployment_normalized",
                 ]:
-                    weights = weights_history[f"weights_{i - 1}"]
-                    deployment = (
-                        deployment / max_capacities
-                    )  # don't overwrite the history reference
+                    _, weights, _ = history[i - 1]
+                    # don't overwrite the reference
+                    deployment = deployment / max_capacities
                 elif weighting_method == "evolving_median":
                     weights = pd.concat(deploy_his, axis="columns").median(axis=1)
                 elif weighting_method == "evolving_average":
@@ -131,14 +126,12 @@ def run_spores(
             network, modified_model, solver_options
         )
 
-        weights_history[f"weights_{i}"] = new_weights
-        spore_networks[f"spore_{i}"] = new_spore
-        spore_models[f"model_{i}"] = solved_model
+        history.append((new_spore, new_weights, solved_model))
 
         # Needed for evolving_median and evolving_average weighting methods
         deploy_his.append(get_deployment(new_spore, asset_indices))
 
-    return spore_networks, weights_history, spore_models, deploy_his
+    return history, deploy_his
 
 
 def dispatch_to_correct_weighting_method(
