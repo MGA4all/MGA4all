@@ -120,13 +120,15 @@ def run_spores(
                 )
 
             elif weighting_method == "evolving_median":
+                deployment = pd.concat(deploy_his, axis="columns").median(axis=1)
                 new_weights = calculate_weights_evolving(
-                    prev_spore, deploy_his, asset_indices, median_deployment
+                    prev_spore, deployment
                 )
 
             elif weighting_method == "evolving_average":
+                deployment = pd.concat(deploy_his, axis="columns").mean(axis=1)
                 new_weights = calculate_weights_evolving(
-                    prev_spore, deploy_his, asset_indices, average_deployment
+                    prev_spore, deployment
                 )
 
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
@@ -222,21 +224,9 @@ def calculate_weights_relative_deployment_normalized(
     return new_weights
 
 
-def average_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
-    """Calculates the average capacity deployment of spore technologies."""
-    return pd.concat(deployment_history, axis="columns").mean(axis=1)
-
-
-def median_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
-    """Calculates the median capacity deployment of spore technologies."""
-    return pd.concat(deployment_history, axis="columns").median(axis=1)
-
-
 def calculate_weights_evolving(
     latest_spore: pypsa.Network,
-    deployment_history: list[pd.Series],
-    asset_indices: pd.MultiIndex,
-    calculate_deployment: Callable,
+    deployment: pd.Series,
     clip_min: float = 0.001,
 ) -> pd.Series:
     """Calculates weights based on the reciprocal of the relative distance from the evolving median or average capacity.
@@ -248,8 +238,8 @@ def calculate_weights_evolving(
     a tech is [0, 0, 0, 0, 1000], the average would be 200. A new solution with 0 deployment would be penalized. While
     the median would be 0. A new solution with 0 deployment would get a weight of 0, identifying it as an underexplored.
     """
-    deployment = calculate_deployment(deployment_history)
-    latest_deployment = get_tech_deployment(latest_spore, asset_indices)
+    indices = deployment.index
+    latest_deployment = get_tech_deployment(latest_spore, indices)
 
     relative_change = (latest_deployment - deployment).abs() / deployment
     # If the relative_change is 0 (latest_deployed == mean or median), we give the relative_change a small
