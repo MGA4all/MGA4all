@@ -519,23 +519,23 @@ def modify_objective(
 
     group_levels = ["component", "attribute"]
     objective_expressions = []
-    for (component, attribute), tech_weight in weights.groupby(level=group_levels):
+    for (component, attribute), tech_weights in weights.groupby(level=group_levels):
         # The group-name index levels are still present with a single index value
-        tech_weight.index = tech_weight.index.droplevel(group_levels)
+        tech_weights.index = tech_weights.index.droplevel(group_levels)
 
-        # If the index of `tech_weight` has a name, it won't match an unnamed index elsewhere,
+        # If the index of `tech_weights` has a name, it won't match an unnamed index elsewhere,
         # which would result in n^2 expression elements instead of just n
-        tech_weight.index.name = None
+        tech_weights.index.name = None
 
         capacity_variable = m[f"{component}-{attribute}"]
 
-        diversification_final_coeffs = diversification_coeff * tech_weight * sense
+        diversification_final_coeffs = diversification_coeff * tech_weights * sense
 
         # Build intensification terms, starting with zeros
-        intensification_final_coeffs = pd.Series(0.0, index=tech_weight.index)
+        intensification_final_coeffs = pd.Series(0.0, index=tech_weights.index)
 
         if spores_mode == "intensify and diversify" and intensification_coeff != 0:
-            intensify_mask = tech_weight.index.isin(intensifiable_technologies)
+            intensify_mask = tech_weights.index.isin(intensifiable_technologies)
             intensification_value = intensification_coeff * sense
             # Apply the value only to the selected technologies
             intensification_final_coeffs[intensify_mask] = intensification_value
