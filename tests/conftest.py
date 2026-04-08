@@ -5,7 +5,7 @@ from mga4all.examples import create_pypsa_network
 
 
 @pytest.fixture(scope="module")
-def spore_tech_indices():
+def asset_indices():
     """Fixture for the SPORE technologies dictionary."""
     return pd.MultiIndex.from_tuples(
         [

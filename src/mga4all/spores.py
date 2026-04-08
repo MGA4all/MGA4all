@@ -51,7 +51,7 @@ def run_spores(
     config_data = spores_config["SPORES"]
 
     # Build nested dict containing spore_techs once to avoid rebuilding again in downstream functions.
-    spore_tech_indices = get_tech_multi_index(config_data)
+    asset_indices = get_asset_multi_index(config_data)
 
     # If no method is passed to the function, get it from the config file.
     if weighting_method is None:
@@ -78,14 +78,11 @@ def run_spores(
 
     # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
     # solution's deployment so that it has a memory of the original least-cost solution.
-    deploy_his = [get_tech_deployment(least_cost_network, spore_tech_indices)]
+    deploy_his = [get_tech_deployment(least_cost_network, asset_indices)]
 
     # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
     # copying networks with a solver_model attached, so we need to remove it first.
-    if (
-        hasattr(least_cost_network.model, "solver_model")
-        and least_cost_network.model is not None
-    ):
+    if least_cost_network and hasattr(least_cost_network.model, "solver_model"):
         least_cost_network.model.solver_model = None
 
     # Run SPORES
@@ -94,7 +91,7 @@ def run_spores(
 
         if i == 1:
             # Previous weights are needed for the relative_deployment weighting methods.
-            prev_weights = initialize_weights(spore_tech_indices)
+            prev_weights = initialize_weights(asset_indices)
 
             # Calculation of new weights in the 1st iteration depends on the `spores_mode`.
             new_weights = calculate_weights_first_iteration(
@@ -110,7 +107,7 @@ def run_spores(
 
             # Dispatch to the correct weighting method
             if weighting_method == "random":
-                new_weights = set_weights_random(spore_tech_indices, upper_bound)
+                new_weights = set_weights_random(asset_indices, upper_bound)
 
             elif weighting_method == "relative_deployment":
                 new_weights = calculate_weights_relative_deployment(
@@ -124,12 +121,12 @@ def run_spores(
 
             elif weighting_method == "evolving_median":
                 new_weights = calculate_weights_evolving(
-                    prev_spore, deploy_his, spore_tech_indices, median_deployment
+                    prev_spore, deploy_his, asset_indices, median_deployment
                 )
 
             elif weighting_method == "evolving_average":
                 new_weights = calculate_weights_evolving(
-                    prev_spore, deploy_his, spore_tech_indices, average_deployment
+                    prev_spore, deploy_his, asset_indices, average_deployment
                 )
 
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
@@ -145,12 +142,12 @@ def run_spores(
         spore_models[f"model_{i}"] = solved_model
 
         # Needed for evolving_median and evolving_average weighting methods
-        deploy_his.append(get_tech_deployment(new_spore, spore_tech_indices))
+        deploy_his.append(get_tech_deployment(new_spore, asset_indices))
 
     return spore_networks, weights, spore_models, deploy_his
 
 
-def get_tech_multi_index(configuration: dict) -> pd.MultiIndex:
+def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
     """Unpack the spore technologies information into a flat datastructure."""
     entries = [
         (component_name, component_info["attribute"], asset)
@@ -166,34 +163,30 @@ def initialize_weights(indices: pd.MultiIndex) -> pd.Series:
     return pd.Series(0.0, index=indices, name="weights")
 
 
-def set_weights_random(
-    spore_techs_indices: pd.MultiIndex, upper_bound: int
-) -> pd.Series:
+def set_weights_random(asset_indices: pd.MultiIndex, upper_bound: int) -> pd.Series:
     """Generates new weights using random numbers from a uniform distribution between 0 and upper_bound."""
     rng = np.random.default_rng()
-    weights = rng.uniform(0, upper_bound, len(spore_techs_indices))
-    return pd.Series(weights, index=spore_techs_indices, name="weights")
+    weights = rng.uniform(0, upper_bound, len(asset_indices))
+    return pd.Series(weights, index=asset_indices, name="weights")
 
 
-def get_tech_deployment(
-    n: pypsa.Network, spore_tech_indices: pd.MultiIndex
-) -> pd.Series:
+def get_tech_deployment(n: pypsa.Network, asset_indices: pd.MultiIndex) -> pd.Series:
     """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
     deployment_values = []
-    for component, capacity_attr, asset in spore_tech_indices:
+    for component, capacity_attr, asset in asset_indices:
         df_name = PYPSA_DATAFRAME_NAMES[component]
         df = getattr(n, df_name)
         deployment_values.append(df[f"{capacity_attr}_opt"][asset])
 
-    return pd.Series(deployment_values, index=spore_tech_indices, name="deployment")
+    return pd.Series(deployment_values, index=asset_indices, name="deployment")
 
 
 def calculate_relative_deployment(
-    n: pypsa.Network, spore_tech_indices: pd.MultiIndex, bigM: float = 1e10
+    n: pypsa.Network, asset_indices: pd.MultiIndex, bigM: float = 1e10
 ) -> pd.Series:
     """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
     relative_deployment = []
-    for component, capacity_attr, asset in spore_tech_indices:
+    for component, capacity_attr, asset in asset_indices:
         df_name = PYPSA_DATAFRAME_NAMES[component]
         df = getattr(n, df_name)
 
@@ -203,7 +196,7 @@ def calculate_relative_deployment(
         relative_deployment.append(opt_caps / max_caps)
 
     return pd.Series(
-        relative_deployment, index=spore_tech_indices, name="relative deployment"
+        relative_deployment, index=asset_indices, name="relative deployment"
     )
 
 
@@ -242,7 +235,7 @@ def median_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
 def calculate_weights_evolving(
     latest_spore: pypsa.Network,
     deployment_history: list[pd.Series],
-    spore_tech_indices: pd.MultiIndex,
+    asset_indices: pd.MultiIndex,
     calculate_deployment: Callable,
     clip_min: float = 0.001,
 ) -> pd.Series:
@@ -256,7 +249,7 @@ def calculate_weights_evolving(
     the median would be 0. A new solution with 0 deployment would get a weight of 0, identifying it as an underexplored.
     """
     deployment = calculate_deployment(deployment_history)
-    latest_deployment = get_tech_deployment(latest_spore, spore_tech_indices)
+    latest_deployment = get_tech_deployment(latest_spore, asset_indices)
 
     relative_change = (latest_deployment - deployment).abs() / deployment
     # If the relative_change is 0 (latest_deployed == mean or median), we give the relative_change a small

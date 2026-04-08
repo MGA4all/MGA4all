@@ -16,32 +16,32 @@ def assert_random_weights_properties(result, upper_bound):
     assert (result < upper_bound).all()
 
 
-def test_calculate_weights_random_basic_case(spore_tech_indices):
+def test_calculate_weights_random_basic_case(asset_indices):
     """Tests the properties of the output from calculate_weights_random with a standard upper bound."""
     upper_bound = 100
 
     # Generate the random weights
-    actual_weights = set_weights_random(spore_tech_indices, upper_bound)
+    actual_weights = set_weights_random(asset_indices, upper_bound)
 
     # Assert that the output has the correct structure, types, and value ranges
     assert_random_weights_properties(actual_weights, upper_bound)
 
 
-def test_calculate_weights_random_upper_bound_one(spore_tech_indices):
+def test_calculate_weights_random_upper_bound_one(asset_indices):
     """Tests the properties of the output when the upper bound is 1."""
     upper_bound = 1
-    actual_weights = set_weights_random(spore_tech_indices, upper_bound)
+    actual_weights = set_weights_random(asset_indices, upper_bound)
 
     assert_random_weights_properties(actual_weights, upper_bound)
 
 
-def test_calculate_weights_random_is_not_deterministic(spore_tech_indices):
+def test_calculate_weights_random_is_not_deterministic(asset_indices):
     """Tests that two consecutive calls produce different results, proving it's random."""
     upper_bound = 100
 
     # Call the function twice
-    result1 = set_weights_random(spore_tech_indices, upper_bound)
-    result2 = set_weights_random(spore_tech_indices, upper_bound)
+    result1 = set_weights_random(asset_indices, upper_bound)
+    result2 = set_weights_random(asset_indices, upper_bound)
 
     # It's astronomically unlikely they will be identical.
     # This confirms the function is not returning the same numbers every time.
