@@ -4,7 +4,7 @@ import pandas as pd
 
 from .conftest import MockPypsaNetwork
 
-from mga4all.spores import calculate_weights_evolving, get_tech_deployment
+from mga4all.spores import calculate_weights_evolving, get_deployment
 
 
 def test_get_tech_deployment(asset_indices):
@@ -16,7 +16,7 @@ def test_get_tech_deployment(asset_indices):
         deployment_data.values(), index=asset_indices, name="deployment"
     )
 
-    actual = get_tech_deployment(network_mock, asset_indices)
+    actual = get_deployment(network_mock, asset_indices)
     pd.testing.assert_series_equal(actual, expected)
 
 
