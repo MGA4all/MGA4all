@@ -123,30 +123,30 @@ def validate_spore_technologies(spores_config):
 
     # Keys of spore_technologies must be in valid_tech_type
     valid_tech_type = PYPSA_DATAFRAME_NAMES.keys()
-    for tech_top_key in spore_technologies:
-        if not isinstance(tech_top_key, dict) or len(tech_top_key) != 1:
+    for asset_group in spore_technologies:
+        if not isinstance(asset_group, dict):
             raise ValueError(
-                "Each element in 'spore_technologies' must be a dict with a single top-level pypsa-component key."
+                "Each element in 'spore_technologies' must be a dictionary."
             )
-        component = next(iter(tech_top_key))
-        if component not in valid_tech_type:
+
+        component_type = asset_group["component"]
+        if component_type not in valid_tech_type:
             raise ValueError(
-                f"Invalid pypsa-component '{component}' in 'spore_technologies'. Must be one of {valid_tech_type}."
+                f"Invalid pypsa-component '{component_type}' in 'spore_technologies'. Must be one of {valid_tech_type}."
             )
 
         # Extra sanity check: each must have attribute and index keys
-        tech_data = tech_top_key[component]
-        if "attribute" not in tech_data or not isinstance(tech_data["attribute"], str):
+        if "attribute" not in asset_group or not isinstance(asset_group["attribute"], str):
             raise ValueError(
-                f"Component '{component}' must define an 'attribute' key with a string value."
+                f"Component '{component_type}' must define an 'attribute' key with a string value."
             )
         if (
-            "index" not in tech_data
-            or not isinstance(tech_data["index"], list)
-            or not tech_data["index"]
+            "assets" not in asset_group
+            or not isinstance(asset_group["assets"], list)
+            or not asset_group["assets"]
         ):
             raise ValueError(
-                f"Component '{component}' must define a non-empty 'index' list."
+                f"Component '{component_type}' must define a non-empty 'index' list."
             )
 
 def validate_intensify_and_diversify(spores_config):
@@ -181,10 +181,10 @@ def validate_coupling_rule(spores_config):
 def validate_no_duplicates(spores_config):
     # Extra check: No duplicate component-index pairs in spore_technologies
     seen_pairs = set()
-    for tech in spores_config["spore_technologies"]:
-        comp = next(iter(tech))
-        for idx in tech[comp]["index"]:
-            pair = (comp, idx)
+    for asset_group in spores_config["spore_technologies"]:
+        component = asset_group["component"]
+        for asset in asset_group["assets"]:
+            pair = (component, asset)
             if pair in seen_pairs:
                 raise ValueError(f"Duplicate technology entry found: {pair}")
             seen_pairs.add(pair)

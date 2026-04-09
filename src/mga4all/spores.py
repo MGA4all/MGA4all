@@ -131,10 +131,9 @@ def run_spores(
 def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
     """Unpack the spore technologies information into a flat datastructure."""
     entries = [
-        (component_name, component_info["attribute"], asset)
-        for technology in configuration["spore_technologies"]
-        for component_name, component_info in technology.items()
-        for asset in component_info["index"]
+        (asset_group["component"], asset_group["attribute"], asset)
+        for asset_group in configuration["spore_technologies"]
+        for asset in asset_group["assets"]
     ]
     return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
 
