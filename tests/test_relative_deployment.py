@@ -7,7 +7,6 @@ from .conftest import MockPypsaNetwork
 from mga4all.spores import (
     initialize_weights,
     calculate_weights_relative_deployment,
-    calculate_weights_relative_deployment_normalized,
 )
 
 
@@ -94,8 +93,8 @@ def test_calculate_weights_relative_deployment_normalized_basic_normalization(
         index=asset_indices,
     )
 
-    actual = calculate_weights_relative_deployment_normalized(
-        latest_spore_mock, prev_weights
+    actual = calculate_weights_relative_deployment(
+        latest_spore_mock, prev_weights, normalize=True
     )
     pd.testing.assert_series_equal(actual, expected)
 
@@ -119,8 +118,8 @@ def test_calculate_weights_relative_deployment_normalized_max_value_changes(
         index=asset_indices,
     )
 
-    actual = calculate_weights_relative_deployment_normalized(
-        latest_spore_mock, prev_weights
+    actual = calculate_weights_relative_deployment(
+        latest_spore_mock, prev_weights, normalize=True
     )
     pd.testing.assert_series_equal(actual, expected)
 
@@ -138,7 +137,7 @@ def test_calculate_weights_relative_deployment_normalized_all_zero_case(
     # The function should not normalize and just return zeros.
     expected = pd.Series([0.0, 0.0, 0.0], index=asset_indices)
 
-    actual = calculate_weights_relative_deployment_normalized(
-        latest_spore_mock, prev_weights
+    actual = calculate_weights_relative_deployment(
+        latest_spore_mock, prev_weights, normalize=True
     )
     pd.testing.assert_series_equal(actual, expected)

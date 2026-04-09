@@ -115,8 +115,8 @@ def run_spores(
                 )
 
             elif weighting_method == "relative_deployment_normalized":
-                new_weights = calculate_weights_relative_deployment_normalized(
-                    prev_spore, prev_weights
+                new_weights = calculate_weights_relative_deployment(
+                    prev_spore, prev_weights, normalize=True
                 )
 
             elif weighting_method == "evolving_median":
@@ -193,22 +193,16 @@ def get_deployment(
 
 
 def calculate_weights_relative_deployment(
-    n: pypsa.Network, prev_weights: pd.Series
+    n: pypsa.Network, prev_weights: pd.Series, normalize: bool=False
 ) -> pd.Series:
-    """Calculate new weights by adding the latest relative deployment to the previous weights."""
+    """Calculate new weights by adding the latest relative deployment to the previous weights,
+    optionally normalized w.r.t. the max_weight.
+    """
     relative_deployment = get_deployment(n, prev_weights.index, relative=True)
-    return prev_weights + relative_deployment
+    new_weights =  prev_weights + relative_deployment
 
-
-def calculate_weights_relative_deployment_normalized(
-    n: pypsa.Network, prev_weights: pd.Series
-) -> pd.Series:
-    """Calculate weights as in `calculate_weights_relative_deployment` then normalizes w.r.t. the max_weight."""
-    new_weights = calculate_weights_relative_deployment(n, prev_weights)
-    # Find the maximum weight from all technologies subject to SPORES.
     max_weight = new_weights.max()
-    # Normalize w.r.t. the max_weight if the max_weight is greater than 0
-    if max_weight > 0:
+    if normalize and max_weight > 0:
         new_weights /= max_weight
 
     return new_weights
