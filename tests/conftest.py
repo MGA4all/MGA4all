@@ -5,40 +5,21 @@ from mga4all.examples import create_pypsa_network
 
 
 @pytest.fixture(scope="module")
-def spore_techs_dict():
+def asset_indices():
     """Fixture for the SPORE technologies dictionary."""
-    return {
-        "Generator": {
-            "p_nom": {
-                "solar": 0,
-                "wind": 0,
-                "gas": 0,
-            }
-        }
-    }
+    return pd.MultiIndex.from_tuples(
+        [
+            ("Generator", "p_nom", "solar"),
+            ("Generator", "p_nom", "wind"),
+            ("Generator", "p_nom", "gas"),
+        ],
+        names=["component", "attribute", "asset"],
+    )
 
 
 @pytest.fixture(scope="module")
 def pypsa_network():
     yield create_pypsa_network()
-
-
-def assert_nested_dict_approx(d1, d2):
-    """Asserts that two nested dictionaries are approximately equal.
-
-    Recursively compares dictionary keys and uses pytest.approx for
-    floating-point value comparisons.
-    """
-    assert d1.keys() == d2.keys(), "Dictionary keys do not match"
-    for key in d1:
-        v1 = d1[key]
-        v2 = d2[key]
-        if isinstance(v1, dict) and isinstance(v2, dict):
-            # If the value is another dictionary, recurse
-            assert_nested_dict_approx(v1, v2)
-        else:
-            # Otherwise, compare the values directly using pytest.approx
-            assert v1 == pytest.approx(v2), f"Value mismatch for key '{key}'"
 
 
 class MockPypsaNetwork:

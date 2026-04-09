@@ -1,6 +1,5 @@
 import linopy
 import pandas as pd
-import pytest
 from .conftest import MockPypsaNetwork
 from linopy.testing import assert_linequal
 
@@ -22,10 +21,10 @@ def setup_model_and_network():
     return n, m
 
 
-def test_modify_objective_diversify_only():
+def test_modify_objective_diversify_only(asset_indices):
     """Tests the standard 'diversify' mode. The objective should only include the diversification term."""
     n, m = setup_model_and_network()
-    weights = {"Generator": {"p_nom": {"solar": 0.5, "wind": 1.0}}}
+    weights = pd.Series([0.5, 1.0, 0.0], index=asset_indices)
     config = {
         "objective_sense": "min",
         "spores_mode": "diversify",
@@ -50,10 +49,10 @@ def test_modify_objective_diversify_only():
     assert_linequal(m.objective.expression, expected_expr)
 
 
-def test_modify_objective_intensify_and_diversify():
+def test_modify_objective_intensify_and_diversify(asset_indices):
     """Tests 'intensify and diversify' mode. The objective should include both terms."""
     n, m = setup_model_and_network()
-    weights = {"Generator": {"p_nom": {"solar": 0.5, "wind": 1.0, "gas": 0.2}}}
+    weights = pd.Series([0.5, 1.0, 0.2], index=asset_indices)
     config = {
         "objective_sense": "min",
         "spores_mode": "intensify and diversify",
@@ -70,10 +69,10 @@ def test_modify_objective_intensify_and_diversify():
     assert_linequal(m.objective.expression, expected_expr)
 
 
-def test_modify_objective_maximization_sense():
+def test_modify_objective_maximization_sense(asset_indices):
     """Tests that an 'objective_sense' of 'max' correctly negates the coefficients."""
     n, m = setup_model_and_network()
-    weights = {"Generator": {"p_nom": {"solar": 0.5, "wind": 1.0}}}
+    weights = pd.Series([0.5, 1.0, 0.0], index=asset_indices)
     config = {
         "objective_sense": "max",
         "spores_mode": "diversify",
@@ -86,21 +85,3 @@ def test_modify_objective_maximization_sense():
     )
     expected_expr = (expected_coeffs * capacity_vars).sum()
     assert_linequal(m.objective.expression, expected_expr)
-
-
-def test_modify_objective_raises_error_on_bad_attribute():
-    """Tests that a ValueError is raised for an incorrect capacity attribute in the weights."""
-    n, m = setup_model_and_network()
-
-    # Using 'p_nom_min' which is not the defined capacity attribute for Generator
-    bad_weights = {"Generator": {"p_nom_min": {"solar": 0.5}}}
-    config = {
-        "objective_sense": "min",
-        "spores_mode": "diversify",
-        "diversification_coefficient": 10,
-    }
-
-    with pytest.raises(
-        ValueError, match="Unknown capacity attribute p_nom_min for Generator"
-    ):
-        modify_objective(n, m, bad_weights, config)

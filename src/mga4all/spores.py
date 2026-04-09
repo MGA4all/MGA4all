@@ -1,7 +1,6 @@
 import logging
 import numbers
-import random
-import statistics
+from typing import Callable, Iterable
 
 import gurobipy as gp
 import linopy
@@ -13,22 +12,24 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-NOMINAL_ATTRS = {
-    "Generator": {"dataframe_name": "generators", "capacity_attribute": "p_nom"},
-    "Line": {"dataframe_name": "lines", "capacity_attribute": "s_nom"},
-    "Transformer": {"dataframe_name": "transformers", "capacity_attribute": "s_nom"},
-    "Link": {"dataframe_name": "links", "capacity_attribute": "p_nom"},
-    "Store": {"dataframe_name": "stores", "capacity_attribute": "e_nom"},
-    "StorageUnit": {"dataframe_name": "storage_units", "capacity_attribute": "p_nom"},
+PYPSA_DATAFRAME_NAMES = {
+    "Generator": "generators",
+    "Line": "lines",
+    "Transformer": "transformers",
+    "Link": "links",
+    "Store": "stores",
+    "StorageUnit": "storage_units",
 }
 
-WEIGHTING_METHODS = [
-    "random",
-    "evolving_median",
-    "evolving_average",
-    "relative_deployment",
-    "relative_deployment_normalized",
-]
+WEIGHTING_METHODS = frozenset(
+    [
+        "random",
+        "evolving_median",
+        "evolving_average",
+        "relative_deployment",
+        "relative_deployment_normalized",
+    ]
+)
 
 
 def run_spores(
@@ -38,7 +39,10 @@ def run_spores(
     weighting_method: str | None = None,
     upper_bound: int = 100,
 ) -> tuple[
-    dict[str, pypsa.Network], dict[str, dict], dict[str, linopy.Model], list[dict]
+    dict[str, pypsa.Network],
+    dict[str, pd.Series],
+    dict[str, linopy.Model],
+    list[pd.Series],
 ]:
     """Run the SPORES optimization to generate multiple near-optimal solutions."""
     # Validate the SPORES configuration.
@@ -47,7 +51,7 @@ def run_spores(
     config_data = spores_config["SPORES"]
 
     # Build nested dict containing spore_techs once to avoid rebuilding again in downstream functions.
-    spore_techs_dict = initialize_weights(config_data)
+    asset_indices = get_asset_multi_index(config_data)
 
     # If no method is passed to the function, get it from the config file.
     if weighting_method is None:
@@ -74,14 +78,11 @@ def run_spores(
 
     # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
     # solution's deployment so that it has a memory of the original least-cost solution.
-    deploy_his = [get_tech_deployment(least_cost_network, spore_techs_dict)]
+    deploy_his = [get_tech_deployment(least_cost_network, asset_indices)]
 
     # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
     # copying networks with a solver_model attached, so we need to remove it first.
-    if (
-        hasattr(least_cost_network.model, "solver_model")
-        and least_cost_network.model is not None
-    ):
+    if least_cost_network and hasattr(least_cost_network.model, "solver_model"):
         least_cost_network.model.solver_model = None
 
     # Run SPORES
@@ -90,7 +91,7 @@ def run_spores(
 
         if i == 1:
             # Previous weights are needed for the relative_deployment weighting methods.
-            prev_weights = initialize_weights(config_data)
+            prev_weights = initialize_weights(asset_indices)
 
             # Calculation of new weights in the 1st iteration depends on the `spores_mode`.
             new_weights = calculate_weights_first_iteration(
@@ -106,7 +107,7 @@ def run_spores(
 
             # Dispatch to the correct weighting method
             if weighting_method == "random":
-                new_weights = calculate_weights_random(spore_techs_dict, upper_bound)
+                new_weights = set_weights_random(asset_indices, upper_bound)
 
             elif weighting_method == "relative_deployment":
                 new_weights = calculate_weights_relative_deployment(
@@ -119,13 +120,13 @@ def run_spores(
                 )
 
             elif weighting_method == "evolving_median":
-                new_weights = calculate_weights_evolving_median(
-                    prev_spore, deploy_his, spore_techs_dict
+                new_weights = calculate_weights_evolving(
+                    prev_spore, deploy_his, asset_indices, median_deployment
                 )
 
             elif weighting_method == "evolving_average":
-                new_weights = calculate_weights_evolving_average(
-                    prev_spore, deploy_his, spore_techs_dict
+                new_weights = calculate_weights_evolving(
+                    prev_spore, deploy_his, asset_indices, average_deployment
                 )
 
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
@@ -141,255 +142,129 @@ def run_spores(
         spore_models[f"model_{i}"] = solved_model
 
         # Needed for evolving_median and evolving_average weighting methods
-        deploy_his.append(get_tech_deployment(new_spore, spore_techs_dict))
+        deploy_his.append(get_tech_deployment(new_spore, asset_indices))
 
     return spore_networks, weights, spore_models, deploy_his
 
 
-def calculate_weights_random(spore_techs_dict: dict, upper_bound: int) -> dict:
+def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
+    """Unpack the spore technologies information into a flat datastructure."""
+    entries = [
+        (component_name, component_info["attribute"], asset)
+        for technology in configuration["spore_technologies"]
+        for component_name, component_info in technology.items()
+        for asset in component_info["index"]
+    ]
+    return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
+
+
+def initialize_weights(indices: pd.MultiIndex) -> pd.Series:
+    """Initialize the weights of all extendable technologies in the network."""
+    return pd.Series(0.0, index=indices, name="weights")
+
+
+def set_weights_random(asset_indices: pd.MultiIndex, upper_bound: int) -> pd.Series:
     """Generates new weights using random numbers from a uniform distribution between 0 and upper_bound."""
-    new_weights = {}
-
-    for component, attrs in spore_techs_dict.items():
-        new_weights.setdefault(component, {})
-
-        for attr, techs_weights_map in attrs.items():
-            new_weights[component].setdefault(attr, {})
-
-            for tech in techs_weights_map.keys():
-                new_weights[component][attr][tech] = random.uniform(0, upper_bound)
-
-    return new_weights
+    rng = np.random.default_rng()
+    weights = rng.uniform(0, upper_bound, len(asset_indices))
+    return pd.Series(weights, index=asset_indices, name="weights")
 
 
-def calculate_weights_relative_deployment(n: pypsa.Network, prev_weights: dict) -> dict:
+def get_tech_deployment(n: pypsa.Network, asset_indices: pd.MultiIndex) -> pd.Series:
+    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
+    deployment_values = []
+    for component, capacity_attr, asset in asset_indices:
+        df_name = PYPSA_DATAFRAME_NAMES[component]
+        df = getattr(n, df_name)
+        deployment_values.append(df[f"{capacity_attr}_opt"][asset])
+
+    return pd.Series(deployment_values, index=asset_indices, name="deployment")
+
+
+def calculate_relative_deployment(
+    n: pypsa.Network, asset_indices: pd.MultiIndex, bigM: float = 1e10
+) -> pd.Series:
+    """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
+    relative_deployment = []
+    for component, capacity_attr, asset in asset_indices:
+        df_name = PYPSA_DATAFRAME_NAMES[component]
+        df = getattr(n, df_name)
+
+        # set actual value in case max is infinite
+        max_caps = min(df[f"{capacity_attr}_max"][asset], bigM)
+        opt_caps = df[f"{capacity_attr}_opt"][asset]
+        relative_deployment.append(opt_caps / max_caps)
+
+    return pd.Series(
+        relative_deployment, index=asset_indices, name="relative deployment"
+    )
+
+
+def calculate_weights_relative_deployment(
+    n: pypsa.Network, prev_weights: pd.Series
+) -> pd.Series:
     """Calculate new weights by adding the latest relative deployment to the previous weights."""
-    relative_deployment = calculate_relative_deployment(n, prev_weights)
-
-    new_weights = {}
-    for component, attrs in prev_weights.items():
-        new_weights[component] = {}
-        for attr, techs_weights_map in attrs.items():
-            updated = {}
-            for tech, weight in techs_weights_map.items():
-                rel_deploy = relative_deployment[component][attr][tech]
-                updated[tech] = weight + rel_deploy
-            new_weights[component][attr] = updated
-
-    return new_weights
+    relative_deployment = calculate_relative_deployment(n, prev_weights.index)
+    return prev_weights + relative_deployment
 
 
 def calculate_weights_relative_deployment_normalized(
-    n: pypsa.Network, prev_weights: dict
-) -> dict:
+    n: pypsa.Network, prev_weights: pd.Series
+) -> pd.Series:
     """Calculate weights as in `calculate_weights_relative_deployment` then normalizes w.r.t. the max_weight."""
     new_weights = calculate_weights_relative_deployment(n, prev_weights)
-
     # Find the maximum weight from all technologies subject to SPORES.
-    max_weight = 0.0
-    for component, attrs in new_weights.items():
-        for attr, techs_weights_map in attrs.items():
-            max_val = max(techs_weights_map.values())
-            if max_val > max_weight:
-                max_weight = max_val
-
+    max_weight = new_weights.max()
     # Normalize w.r.t. the max_weight if the max_weight is greater than 0
     if max_weight > 0:
-        for component, attrs in new_weights.items():
-            for attr, techs_weights_map in attrs.items():
-                for tech, weight in techs_weights_map.items():
-                    techs_weights_map[tech] = weight / max_weight
+        new_weights /= max_weight
 
     return new_weights
 
 
-def calculate_weights_evolving_median(
-    latest_spore: pypsa.Network,
-    deployment_history: list[dict],
-    spore_techs_dict: dict,
-    clip_min: float = 0.001,
-) -> dict:
-    """Calculates weights based on the reciprocal of the relative distance from the evolving median capacity.
+def average_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
+    """Calculates the average capacity deployment of spore technologies."""
+    return pd.concat(deployment_history, axis="columns").mean(axis=1)
 
-    This weighting method uses the median instead of the average, so that the weights are not skewed by a single outlier
+
+def median_deployment(deployment_history: Iterable[pd.Series]) -> pd.Series:
+    """Calculates the median capacity deployment of spore technologies."""
+    return pd.concat(deployment_history, axis="columns").median(axis=1)
+
+
+def calculate_weights_evolving(
+    latest_spore: pypsa.Network,
+    deployment_history: list[pd.Series],
+    asset_indices: pd.MultiIndex,
+    calculate_deployment: Callable,
+    clip_min: float = 0.001,
+) -> pd.Series:
+    """Calculates weights based on the reciprocal of the relative distance from the evolving median or average capacity.
+
+    Weighting can be done using average or median, depending on which function is given for `calculate_deployment`.
+
+    When the median instead of the average is used for the weighting method, the weights are not skewed by an outlier
     spore that might have had an unusually large deployment of a specific technology. For example, if the deploy_his for
     a tech is [0, 0, 0, 0, 1000], the average would be 200. A new solution with 0 deployment would be penalized. While
     the median would be 0. A new solution with 0 deployment would get a weight of 0, identifying it as an underexplored.
     """
-    median_deployment = calculate_median_deployment(
-        deployment_history, spore_techs_dict
-    )
-    latest_deployment = get_tech_deployment(latest_spore, spore_techs_dict)
+    deployment = calculate_deployment(deployment_history)
+    latest_deployment = get_tech_deployment(latest_spore, asset_indices)
 
-    new_weights = {}
+    relative_change = (latest_deployment - deployment).abs() / deployment
+    # If the relative_change is 0 (latest_deployed == mean or median), we give the relative_change a small
+    # value which will give it a large penalty (weight) since we take the reciprocal of the change.
+    relative_change[relative_change < clip_min] = clip_min
 
-    for component, attrs in median_deployment.items():
-        new_weights.setdefault(component, {})
-
-        for attr, techs_median_deployment_map in attrs.items():
-            new_weights[component].setdefault(attr, {})
-
-            for tech, median_deployed_cap in techs_median_deployment_map.items():
-                latest_deployed_cap = (
-                    latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
-                )
-
-                if median_deployed_cap > 0:
-                    relative_change = (
-                        abs(latest_deployed_cap - median_deployed_cap)
-                        / median_deployed_cap
-                    )
-
-                    # If the relative_change is 0 (latest_deployed_cap == median), we give the relative_change a small
-                    # value which will give it a large penalty (weight) since we take the reciprocal of the change.
-                    weight = 1 / max(relative_change, clip_min)
-
-                elif median_deployed_cap == 0:
-                    # If the median_deployed_cap is 0, we want to encourage the deployment of this technology.
-                    weight = 0.0
-
-                new_weights[component][attr][tech] = weight
-
+    new_weights = 1 / relative_change
+    # If the deployment of an asset is 0, we want to encourage the deployment of this technology.
+    new_weights[deployment == 0] = 0.0
     return new_weights
-
-
-def calculate_weights_evolving_average(
-    latest_spore: pypsa.Network,
-    deployment_history: list[dict],
-    spore_techs_dict: dict,
-    clip_min: float = 0.001,
-) -> dict:
-    """Calculates weights based on the reciprocal of the relative distance from the evolving average capacity."""
-    average_deployment = calculate_average_deployment(
-        deployment_history, spore_techs_dict
-    )
-    latest_deployment = get_tech_deployment(latest_spore, spore_techs_dict)
-
-    new_weights = {}
-
-    for component, attrs in average_deployment.items():
-        new_weights.setdefault(component, {})
-
-        for attr, techs_average_deployment_map in attrs.items():
-            new_weights[component].setdefault(attr, {})
-
-            for tech, average_deployed_cap in techs_average_deployment_map.items():
-                latest_deployed_cap = (
-                    latest_deployment.get(component, {}).get(attr, {}).get(tech, 0)
-                )
-
-                if average_deployed_cap > 0:
-                    relative_change = (
-                        abs(latest_deployed_cap - average_deployed_cap)
-                        / average_deployed_cap
-                    )
-
-                    # If the relative_change is 0 (latest_deployed_cap == average), we give the relative_change a small
-                    # value which will give it a large penalty (weight) since we take the reciprocal of the change.
-                    weight = 1 / max(relative_change, clip_min)
-
-                elif average_deployed_cap == 0:
-                    # If the average_deployed_cap is 0, we want to encourage the deployment of this technology.
-                    weight = 0.0
-
-                new_weights[component][attr][tech] = weight
-
-    return new_weights
-
-
-def calculate_relative_deployment(
-    n: pypsa.Network, spore_techs_dict: dict, bigM: float = 1e10
-) -> dict:
-    """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
-    relative_deployment = {}
-
-    for component, attrs in spore_techs_dict.items():
-        extendable_techs = n.get_extendable_i(component)
-
-        if extendable_techs.empty:
-            continue
-
-        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
-        df = getattr(n, df_name)
-        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
-        max_caps = df[f"{capacity_attr}_max"][extendable_techs]
-        max_caps = max_caps.replace(np.inf, bigM)
-        opt_caps = df[f"{capacity_attr}_opt"][extendable_techs]
-        rel_caps = (opt_caps / max_caps).to_dict()  # pd.Series to dict conversion
-
-        relative_deployment[component] = {capacity_attr: rel_caps}
-
-    return relative_deployment
-
-
-def calculate_average_deployment(
-    deployment_history: list[dict], spore_techs_dict: dict
-) -> dict:
-    """Calculates the average capacity deployment of spore technologies."""
-    average_deployment = {}
-
-    for component, attrs in spore_techs_dict.items():
-        average_deployment.setdefault(component, {})
-        for attr, techs_map in attrs.items():
-            average_deployment[component].setdefault(attr, {})
-            for tech in techs_map:
-                total_deployed_capacity = sum(
-                    deployed_capacity.get(component, {}).get(attr, {}).get(tech, 0)
-                    for deployed_capacity in deployment_history
-                )
-
-                average_deployment[component][attr][tech] = (
-                    total_deployed_capacity / len(deployment_history)
-                )
-
-    return average_deployment
-
-
-def calculate_median_deployment(
-    deployment_history: list[dict], spore_techs_dict: dict
-) -> dict:
-    """Calculates the median capacity deployment of spore technologies."""
-    median_deployment = {}
-
-    for component, attrs in spore_techs_dict.items():
-        median_deployment.setdefault(component, {})
-        for attr, techs_map in attrs.items():
-            median_deployment[component].setdefault(attr, {})
-            for tech in techs_map:
-                # Step 1: Collect all historical deployment values for the specific tech into a list.
-                deployed_capacities = [
-                    deployed_capacity.get(component, {}).get(attr, {}).get(tech, 0)
-                    for deployed_capacity in deployment_history
-                ]
-
-                # Step 2: Calculate the median of that list.
-                # Handle the edge case where the history is empty to avoid an error.
-                if not deployed_capacities:
-                    median_value = 0.0
-                else:
-                    median_value = statistics.median(deployed_capacities)
-
-                median_deployment[component][attr][tech] = median_value
-
-    return median_deployment
-
-
-def initialize_weights(configuration: dict) -> dict:
-    """Initialize the weights of all extendable technologies in the network to zero."""
-    weights = {}
-
-    for tech in configuration["spore_technologies"]:
-        for comp, comp_info in tech.items():
-            attr = comp_info["attribute"]
-            comp_weights = {k: 0 for k in comp_info["index"]}
-            weights.setdefault(comp, {})[attr] = comp_weights
-
-    return weights
 
 
 def calculate_weights_first_iteration(
-    n: pypsa.Network, spores_mode: str, prev_weights: dict
-):
+    n: pypsa.Network, spores_mode: str, prev_weights: pd.Series
+) -> pd.Series:
     """Calculate weights for the first iteration of SPORES based on spores_mode.
 
     This function ensures that we either start with zero weights (intensify) or
@@ -414,28 +289,6 @@ def calculate_weights_first_iteration(
         return prev_weights
 
     return calculate_weights_relative_deployment(n, prev_weights)
-
-
-def get_tech_deployment(n: pypsa.Network, spore_techs_dict: dict) -> dict:
-    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
-    deployment = {}
-
-    for component, attrs in spore_techs_dict.items():
-        extendable_techs = n.get_extendable_i(component)
-
-        if extendable_techs.empty:
-            continue
-
-        df_name = NOMINAL_ATTRS[component]["dataframe_name"]
-        df = getattr(n, df_name)
-        capacity_attr = NOMINAL_ATTRS[component]["capacity_attribute"]
-        opt_caps = df[f"{capacity_attr}_opt"][
-            extendable_techs
-        ].to_dict()  # pd.Series to dict conversion
-
-        deployment[component] = {capacity_attr: opt_caps}
-
-    return deployment
 
 
 def validate_spores_configuration(config: dict):
@@ -515,7 +368,7 @@ def validate_spores_configuration(config: dict):
         raise ValueError("'spore_technologies' must be a non-empty list.")
 
     # Keys of spore_technologies must be in valid_tech_type
-    valid_tech_type = NOMINAL_ATTRS.keys()
+    valid_tech_type = PYPSA_DATAFRAME_NAMES.keys()
     for tech_top_key in spore_technologies:
         if not isinstance(tech_top_key, dict) or len(tech_top_key) != 1:
             raise ValueError(
@@ -608,7 +461,7 @@ def optimize_model_and_assign_solution_to_network(
 
 
 def create_modified_model(
-    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: dict
+    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: pd.Series
 ) -> linopy.Model:
     """Create the modified model (with the new objective and budget constraint) from the least-cost network."""
     # 1. Access the underlying linopy model of the least-cost pypsa network
@@ -634,7 +487,7 @@ def modified_model_for_spores_run(
     m: linopy.Model,
     configuration: dict,
     optimal_cost: float,
-    weights: dict,
+    weights: pd.Series,
 ) -> linopy.Model:
     """Modify the model given model to add the new objective function and budget constraint."""
     # 1. Add the budget constraint to the model
@@ -653,7 +506,7 @@ def modified_model_for_spores_run(
 
 
 def modify_objective(
-    n: pypsa.Network, m: linopy.Model, weights: dict, configuration: dict
+    n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: dict
 ) -> linopy.Model:
     """Modify the objective function to optimize technology capacities instead of costs."""
     sense = parse_objective_sense(configuration["objective_sense"])
@@ -664,48 +517,36 @@ def modify_objective(
         intensification_coeff = float(intensification_coeff)
     intensifiable_technologies = configuration.get("intensifiable_technologies")
 
+    group_levels = ["component", "attribute"]
     objective_expressions = []
-    for component, comp_info in weights.items():
-        for component_attr, tech_weight_dict in comp_info.items():
-            if component_attr != NOMINAL_ATTRS[component]["capacity_attribute"]:
-                raise ValueError(
-                    f"Unknown capacity attribute {component_attr} for {component}"
-                )
+    for (component, attribute), tech_weights in weights.groupby(level=group_levels):
+        # The group-name index levels are still present with a single index value
+        tech_weights.index = tech_weights.index.droplevel(group_levels)
 
-            capacity_variable = m[f"{component}-{component_attr}"]
+        # If the index of `tech_weights` has a name, it won't match an unnamed index elsewhere,
+        # which would result in n^2 expression elements instead of just n
+        tech_weights.index.name = None
 
-            # Build diversification terms
-            tech_weight_table = (
-                pd.Series(tech_weight_dict)
-                .reindex(n.get_extendable_i(component))
-                .fillna(0)
-            )
-            diversification_final_coeffs = (
-                diversification_coeff * tech_weight_table * sense
-            )
+        capacity_variable = m[f"{component}-{attribute}"]
 
-            # Build intensification terms
-            intensification_final_coeffs = pd.Series(
-                0.0, index=tech_weight_table.index
-            )  # Start with zeros
+        diversification_final_coeffs = diversification_coeff * tech_weights * sense
 
-            if spores_mode == "intensify and diversify" and intensification_coeff != 0:
-                intensify_mask = tech_weight_table.index.isin(
-                    intensifiable_technologies
-                )
-                intensification_value = intensification_coeff * sense
-                # Apply the value only to the selected technologies
-                intensification_final_coeffs[intensify_mask] = intensification_value
+        # Build intensification terms, starting with zeros
+        intensification_final_coeffs = pd.Series(0.0, index=tech_weights.index)
 
-            # Add the coefficient Series together first
-            combined_final_coeffs = (
-                diversification_final_coeffs + intensification_final_coeffs
-            )
+        if spores_mode == "intensify and diversify" and intensification_coeff != 0:
+            intensify_mask = tech_weights.index.isin(intensifiable_technologies)
+            intensification_value = intensification_coeff * sense
+            # Apply the value only to the selected technologies
+            intensification_final_coeffs[intensify_mask] = intensification_value
 
-            # 4. Create a single, clean LinearExpression
-            objective_expressions.append(
-                (combined_final_coeffs * capacity_variable).sum()
-            )
+        # Add the coefficient Series together first
+        combined_final_coeffs = (
+            diversification_final_coeffs + intensification_final_coeffs
+        )
+
+        # 4. Create a single, clean LinearExpression
+        objective_expressions.append((combined_final_coeffs * capacity_variable).sum())
 
     m.remove_objective()
     m.objective = sum(objective_expressions)
