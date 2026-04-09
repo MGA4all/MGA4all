@@ -1,5 +1,4 @@
 import logging
-import numbers
 from typing import Callable, Iterable
 
 import gurobipy as gp
@@ -8,28 +7,10 @@ import numpy as np
 import pandas as pd
 import pypsa
 
+from .validate import validate_spores_configuration, WEIGHTING_METHODS, PYPSA_DATAFRAME_NAMES
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-PYPSA_DATAFRAME_NAMES = {
-    "Generator": "generators",
-    "Line": "lines",
-    "Transformer": "transformers",
-    "Link": "links",
-    "Store": "stores",
-    "StorageUnit": "storage_units",
-}
-
-WEIGHTING_METHODS = frozenset(
-    [
-        "random",
-        "evolving_median",
-        "evolving_average",
-        "relative_deployment",
-        "relative_deployment_normalized",
-    ]
-)
 
 
 def run_spores(
@@ -289,150 +270,6 @@ def calculate_weights_first_iteration(
         return prev_weights
 
     return calculate_weights_relative_deployment(n, prev_weights)
-
-
-def validate_spores_configuration(config: dict):
-    """Validate a SPORES YAML config against the specified requirements."""
-    if "SPORES" not in config:
-        raise ValueError("Missing top-level key: 'SPORES'.")
-    spores_config = config["SPORES"]
-
-    # Must have config_name which will be used in the output folder name to save results.
-    if (
-        "config_name" not in spores_config
-        or not isinstance(spores_config["config_name"], str)
-        or not spores_config["config_name"].strip()
-    ):
-        raise ValueError("'config_name' must be provided as a non-empty string.")
-
-    # Required keys
-    required_keys_in_spores_config = [
-        "objective_sense",
-        "spores_slack",
-        "num_spores",
-        "weighting_method",
-        "spores_mode",
-        "diversification_coefficient",
-        "spore_technologies",
-    ]
-
-    for key in required_keys_in_spores_config:
-        if key not in spores_config:
-            raise ValueError(f"Missing required key: '{key}'.")
-
-    # objective_sense must be min for consistency.
-    if spores_config["objective_sense"] != "min":
-        raise ValueError(
-            "'objective_sense' must be 'min'. To maximize, please set the 'diversification_coefficient' "
-            "and/or 'intensification_coefficient' to negative."
-        )
-
-    # spores_slack must be between 0 and 1
-    if not isinstance(spores_config["spores_slack"], numbers.Number) or not (
-        0 <= spores_config["spores_slack"] <= 1
-    ):
-        raise ValueError("'spores_slack' must be a number between 0 and 1.")
-
-    # num_spores must be integer >= 1
-    if (
-        not isinstance(spores_config["num_spores"], int)
-        or spores_config["num_spores"] < 1
-    ):
-        raise ValueError("'num_spores' must be an integer >= 1.")
-
-    # weighting_method must be valid
-    if spores_config["weighting_method"] not in WEIGHTING_METHODS:
-        raise ValueError(
-            f"Unsupported {spores_config['weighting_method']=}, must be one of {WEIGHTING_METHODS}."
-        )
-
-    # spores_mode must be valid
-    if spores_config["spores_mode"] not in ["diversify", "intensify and diversify"]:
-        raise ValueError(
-            "'spores_mode' must be either 'diversify' or 'intensify and diversify'."
-        )
-
-    # diversification_coefficient must be positive number
-    diversification_coeff = spores_config["diversification_coefficient"]
-    try:
-        diversification_coeff = float(diversification_coeff)
-    except (TypeError, ValueError):
-        raise ValueError("'diversification_coefficient' must be a number.")
-
-    if diversification_coeff <= 0:
-        raise ValueError("'diversification_coefficient' must be a positive number.")
-
-    # spore_technologies cannot be empty
-    spore_technologies = spores_config["spore_technologies"]
-    if not isinstance(spore_technologies, list) or not spore_technologies:
-        raise ValueError("'spore_technologies' must be a non-empty list.")
-
-    # Keys of spore_technologies must be in valid_tech_type
-    valid_tech_type = PYPSA_DATAFRAME_NAMES.keys()
-    for tech_top_key in spore_technologies:
-        if not isinstance(tech_top_key, dict) or len(tech_top_key) != 1:
-            raise ValueError(
-                "Each element in 'spore_technologies' must be a dict with a single top-level pypsa-component key."
-            )
-        component = next(iter(tech_top_key))
-        if component not in valid_tech_type:
-            raise ValueError(
-                f"Invalid pypsa-component '{component}' in 'spore_technologies'. Must be one of {valid_tech_type}."
-            )
-
-        # Extra sanity check: each must have attribute and index keys
-        tech_data = tech_top_key[component]
-        if "attribute" not in tech_data or not isinstance(tech_data["attribute"], str):
-            raise ValueError(
-                f"Component '{component}' must define an 'attribute' key with a string value."
-            )
-        if (
-            "index" not in tech_data
-            or not isinstance(tech_data["index"], list)
-            or not tech_data["index"]
-        ):
-            raise ValueError(
-                f"Component '{component}' must define a non-empty 'index' list."
-            )
-
-    # If spores_mode is "intensify and diversify", extra checks
-    if spores_config["spores_mode"] == "intensify and diversify":
-        try:
-            spores_config["intensification_coefficient"] = float(
-                spores_config["intensification_coefficient"]
-            )
-        except (KeyError, TypeError, ValueError):
-            raise ValueError(
-                "'intensification_coefficient' must be provided as a number for spores_mode 'intensify and diversify'."
-            )
-        if (
-            "intensifiable_technologies" not in spores_config
-            or not isinstance(spores_config["intensifiable_technologies"], list)
-            or not spores_config["intensifiable_technologies"]
-        ):
-            raise ValueError(
-                "'intensifiable_technologies' must be a non-empty list when 'spores_mode' is 'intensify and diversify'."
-            )
-
-    # Coupling rule: intensification_coefficient and intensifiable_technologies must be both present or both absent
-    has_coeff = "intensification_coefficient" in spores_config
-    has_intensifiable = "intensifiable_technologies" in spores_config
-    if has_coeff != has_intensifiable:  # XOR
-        raise ValueError(
-            "'intensification_coefficient' and 'intensifiable_technologies' must be provided or omitted together."
-        )
-
-    # Extra check: No duplicate component-index pairs in spore_technologies
-    seen_pairs = set()
-    for tech in spore_technologies:
-        comp = next(iter(tech))
-        for idx in tech[comp]["index"]:
-            pair = (comp, idx)
-            if pair in seen_pairs:
-                raise ValueError(f"Duplicate technology entry found: {pair}")
-            seen_pairs.add(pair)
-
-    return True
 
 
 # ======================== Pypsa/linopy related code implementation section ========================
