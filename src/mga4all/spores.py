@@ -78,7 +78,7 @@ def run_spores(
 
     # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
     # solution's deployment so that it has a memory of the original least-cost solution.
-    deploy_his = [get_tech_deployment(least_cost_network, asset_indices)]
+    deploy_his = [get_deployment(least_cost_network, asset_indices)]
 
     # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
     # copying networks with a solver_model attached, so we need to remove it first.
@@ -144,7 +144,7 @@ def run_spores(
         spore_models[f"model_{i}"] = solved_model
 
         # Needed for evolving_median and evolving_average weighting methods
-        deploy_his.append(get_tech_deployment(new_spore, asset_indices))
+        deploy_his.append(get_deployment(new_spore, asset_indices))
 
     return spore_networks, weights, spore_models, deploy_his
 
@@ -172,41 +172,31 @@ def set_weights_random(asset_indices: pd.MultiIndex, upper_bound: int) -> pd.Ser
     return pd.Series(weights, index=asset_indices, name="weights")
 
 
-def get_tech_deployment(n: pypsa.Network, asset_indices: pd.MultiIndex) -> pd.Series:
-    """Get the deployed capacity (p_nom_opt) of spore techs in the optimized network."""
+def get_deployment(
+    n: pypsa.Network, asset_indices: pd.MultiIndex, bigM: float = 1e10, relative: bool=False
+) -> pd.Series:
+    """Calculate the (relative) deployment of assets in the optimized network."""
     deployment_values = []
     for component, capacity_attr, asset in asset_indices:
         df_name = PYPSA_DATAFRAME_NAMES[component]
         df = getattr(n, df_name)
-        deployment_values.append(df[f"{capacity_attr}_opt"][asset])
+        opt_caps = df[f"{capacity_attr}_opt"][asset]
+
+        if relative:
+            # set actual value in case max is infinite
+            max_caps = min(df[f"{capacity_attr}_max"][asset], bigM)
+            deployment_values.append(opt_caps / max_caps)
+        else:
+            deployment_values.append(opt_caps)
 
     return pd.Series(deployment_values, index=asset_indices, name="deployment")
-
-
-def calculate_relative_deployment(
-    n: pypsa.Network, asset_indices: pd.MultiIndex, bigM: float = 1e10
-) -> pd.Series:
-    """Calculate the relative deployment (p_nom_opt/p_nom_max) of techs in the optimized network."""
-    relative_deployment = []
-    for component, capacity_attr, asset in asset_indices:
-        df_name = PYPSA_DATAFRAME_NAMES[component]
-        df = getattr(n, df_name)
-
-        # set actual value in case max is infinite
-        max_caps = min(df[f"{capacity_attr}_max"][asset], bigM)
-        opt_caps = df[f"{capacity_attr}_opt"][asset]
-        relative_deployment.append(opt_caps / max_caps)
-
-    return pd.Series(
-        relative_deployment, index=asset_indices, name="relative deployment"
-    )
 
 
 def calculate_weights_relative_deployment(
     n: pypsa.Network, prev_weights: pd.Series
 ) -> pd.Series:
     """Calculate new weights by adding the latest relative deployment to the previous weights."""
-    relative_deployment = calculate_relative_deployment(n, prev_weights.index)
+    relative_deployment = get_deployment(n, prev_weights.index, relative=True)
     return prev_weights + relative_deployment
 
 
@@ -239,7 +229,7 @@ def calculate_weights_evolving(
     the median would be 0. A new solution with 0 deployment would get a weight of 0, identifying it as an underexplored.
     """
     indices = deployment.index
-    latest_deployment = get_tech_deployment(latest_spore, indices)
+    latest_deployment = get_deployment(latest_spore, indices)
 
     relative_change = (latest_deployment - deployment).abs() / deployment
     # If the relative_change is 0 (latest_deployed == mean or median), we give the relative_change a small
