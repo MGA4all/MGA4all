@@ -7,7 +7,11 @@ import numpy as np
 import pandas as pd
 import pypsa
 
-from .validate import validate_spores_configuration, WEIGHTING_METHODS, PYPSA_DATAFRAME_NAMES
+from .validate import (
+    validate_spores_configuration,
+    WEIGHTING_METHODS,
+    PYPSA_DATAFRAME_NAMES,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
