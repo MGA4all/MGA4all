@@ -1,6 +1,6 @@
 import logging
 import numbers
-from typing import Callable, Iterable
+from functools import partial
 
 import gurobipy as gp
 import linopy
@@ -73,7 +73,7 @@ def run_spores(
 
     # Initialize collectors to store results/history
     spore_networks = {}
-    weights = {}
+    weights_history = {}
     spore_models = {}
 
     # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
@@ -99,7 +99,7 @@ def run_spores(
             )
 
         else:
-            prev_weights = weights[
+            prev_weights = weights_history[
                 f"weights_{i - 1}"
             ]  # Needed for relative_deployment weighting methods.
 
@@ -108,27 +108,16 @@ def run_spores(
             # Dispatch to the correct weighting method
             if weighting_method == "random":
                 new_weights = set_weights_random(asset_indices, upper_bound)
+            else:
+                if weighting_method in ["relative_deployment", "relative_deployment_normalized"]:
+                    weights = prev_weights
+                elif weighting_method == "evolving_median":
+                    weights = pd.concat(deploy_his, axis="columns").median(axis=1)
+                elif weighting_method == "evolving_average":
+                    weights = pd.concat(deploy_his, axis="columns").mean(axis=1)
 
-            elif weighting_method == "relative_deployment":
-                new_weights = calculate_weights_relative_deployment(
-                    prev_spore, prev_weights
-                )
-
-            elif weighting_method == "relative_deployment_normalized":
-                new_weights = calculate_weights_relative_deployment(
-                    prev_spore, prev_weights, normalize=True
-                )
-
-            elif weighting_method == "evolving_median":
-                deployment = pd.concat(deploy_his, axis="columns").median(axis=1)
-                new_weights = calculate_weights_evolving(
-                    prev_spore, deployment
-                )
-
-            elif weighting_method == "evolving_average":
-                deployment = pd.concat(deploy_his, axis="columns").mean(axis=1)
-                new_weights = calculate_weights_evolving(
-                    prev_spore, deployment
+                new_weights = dispatch_to_correct_weighting_method(
+                    prev_spore, weights, weighting_method
                 )
 
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
@@ -139,14 +128,25 @@ def run_spores(
             network, modified_model, solver_options
         )
 
-        weights[f"weights_{i}"] = new_weights
+        weights_history[f"weights_{i}"] = new_weights
         spore_networks[f"spore_{i}"] = new_spore
         spore_models[f"model_{i}"] = solved_model
 
         # Needed for evolving_median and evolving_average weighting methods
         deploy_his.append(get_deployment(new_spore, asset_indices))
 
-    return spore_networks, weights, spore_models, deploy_his
+    return spore_networks, weights_history, spore_models, deploy_his
+
+
+def dispatch_to_correct_weighting_method(spore: pypsa.network, weights: pd.Series, weighting_method: str) -> pd.Series:
+    """Calculate weights based on the given weighting method"""
+    weighting_functions = {
+        "relative_deployment": calculate_weights_relative_deployment,
+        "relative_deployment_normalized": partial(calculate_weights_relative_deployment, normalize=True),
+        "evolving_average": calculate_weights_evolving,
+        "evolving_median": calculate_weights_evolving,
+    }
+    return weighting_functions[weighting_method](spore, weights)
 
 
 def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
