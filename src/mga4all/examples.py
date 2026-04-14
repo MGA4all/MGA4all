@@ -1,10 +1,29 @@
+from pathlib import Path
+
 import pandas as pd
 import pypsa
 
 
+def load_from_cache_or_fetch_scigrid_de():
+    """Load the scigrid_de PyPSA example network from cache or fetch online."""
+    cachefile = Path("~/.cache/mga4all/scigrid_de.nc")
+    if cachefile.exists():
+        network = pypsa.Network()
+        network.import_from_netcdf(cachefile)
+        return network
+
+    network = pypsa.examples.scigrid_de()
+    try:
+        cachefile.parent.mkdir(parents=True, exist_ok=True)
+        network.export_to_netcdf(cachefile)
+    except IOError:  # skip caching if we cannot write to disk for some reason.
+        pass
+    return network
+
+
 def create_pypsa_network(num_snapshots=24) -> pypsa.Network:
     """Create a simple PyPSA network."""
-    base_network = pypsa.examples.scigrid_de()
+    base_network = load_from_cache_or_fetch_scigrid_de()
     example_network = pypsa.Network(
         snapshots=pd.date_range("2025-01-01", periods=num_snapshots, freq="h")
     )
