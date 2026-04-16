@@ -31,6 +31,7 @@ dependencies = [
   "highspy",
   "numpy",
   "pandas",
+  "pydantic",
   "mga4all[pypsa]",  # NOTE: included as a default backend until we have others
 ]
 
