@@ -6,7 +6,7 @@ import pypsa
 
 def load_from_cache_or_fetch_scigrid_de():
     """Load the scigrid_de PyPSA example network from cache or fetch online."""
-    cachefile = Path("~/.cache/mga4all/scigrid_de.nc")
+    cachefile = Path.home() / ".cache/mga4all/scigrid_de.nc"
     if cachefile.exists():
         network = pypsa.Network()
         network.import_from_netcdf(cachefile)

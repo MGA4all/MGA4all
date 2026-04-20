@@ -3,9 +3,9 @@ Various Modelling to Generate Alternative schemes for different energy system op
 
 ## Implemented Algorithms and supported backends
 
-| Algorithm | PyPSA + linopy |
-|-----------|----------------|
-|[SPORES](https://doi.org/10.1016/j.joule.2020.08.002) | ✅ |
+| Algorithm                                             | PyPSA + linopy |
+|-------------------------------------------------------|----------------|
+| [SPORES](https://doi.org/10.1016/j.joule.2020.08.002) | ✅              |
 
 ## Running MGA4all
 
