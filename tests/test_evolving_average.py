@@ -22,10 +22,8 @@ def test_get_tech_deployment(asset_indices):
 
 def test_evolving_average_basic_scenario_absolute(asset_indices):
     """Tests a basic case with absolute capacities."""
-    deployment = pd.Series([500, 500, 100], index=asset_indices)
-
-    latest_deployment_data = {"solar": 400, "wind": 500, "gas": 200}
-    latest_spore_mock = MockPypsaNetwork(latest_deployment_data)
+    latest_deployment = pd.Series([400, 500, 200], index=asset_indices)
+    average_deployment = pd.Series([500, 500, 100], index=asset_indices)
 
     expected = pd.Series(
         [
@@ -36,18 +34,14 @@ def test_evolving_average_basic_scenario_absolute(asset_indices):
         index=asset_indices,
     )
 
-    actual = calculate_weights_evolving(
-        latest_spore_mock, deployment
-    )
+    actual = calculate_weights_evolving(latest_deployment, average_deployment)
     pd.testing.assert_series_equal(actual, expected)
 
 
 def test_evolving_average_robust_zero_average_absolute(asset_indices):
     """Tests the robust logic where average deployment is zero."""
-    deployment = pd.Series([800, 200, 0], index=asset_indices)
-
-    latest_deployment_data = {"solar": 800, "wind": 200, "gas": 500}  # 'gas' is new
-    latest_spore_mock = MockPypsaNetwork(latest_deployment_data)
+    latest_deployment = pd.Series([800, 200, 500], index=asset_indices)
+    average_deployment = pd.Series([800, 200, 0], index=asset_indices)
 
     expected = pd.Series(
         [
@@ -58,19 +52,14 @@ def test_evolving_average_robust_zero_average_absolute(asset_indices):
         index=asset_indices,
     )
 
-    actual = calculate_weights_evolving(
-        latest_spore_mock, deployment
-    )
+    actual = calculate_weights_evolving(latest_deployment, average_deployment)
     pd.testing.assert_series_equal(actual, expected)
 
 
 def test_evolving_average_latest_is_zero_absolute(asset_indices):
     """Tests the case where a previously used tech is not in the latest deployment."""
-    deployment = pd.Series([500, 500, 500], index=asset_indices)
-    # Evolving Average: solar=500, wind=500, gas=500
-
-    latest_deployment_data = {"solar": 0, "wind": 500, "gas": 1000}  # solar is now 0
-    latest_spore_mock = MockPypsaNetwork(latest_deployment_data)
+    latest_deployment = pd.Series([0, 500, 1000], index=asset_indices)
+    average_deployment = pd.Series([500, 500, 500], index=asset_indices)
 
     expected = pd.Series(
         [
@@ -81,7 +70,5 @@ def test_evolving_average_latest_is_zero_absolute(asset_indices):
         index=asset_indices,
     )
 
-    actual = calculate_weights_evolving(
-        latest_spore_mock, deployment
-    )
+    actual = calculate_weights_evolving(latest_deployment, average_deployment)
     pd.testing.assert_series_equal(actual, expected)
