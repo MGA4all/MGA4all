@@ -38,13 +38,20 @@ def run_spores(
     solver_options: dict,
     weighting_method: str | None = None,
     upper_bound: int = 100,
-) -> tuple[
-    dict[str, pypsa.Network],
-    dict[str, pd.Series],
-    dict[str, linopy.Model],
-    list[pd.Series],
-]:
-    """Run the SPORES optimization to generate multiple near-optimal solutions."""
+) -> tuple[list[pypsa.Network], list[linopy.Model], list[pd.Series], list[pd.Series]]:
+    """Run the SPORES optimization to generate multiple near-optimal solutions.
+
+    Returns
+    -------
+    spore_networks: list[pypsa.Network]
+    spore_models: list[linopy.Model]
+    weights_history: list[pd.Series]
+      Note this is 1 item longer, as it includes initialisation weight
+    deploy_his: list[pd.Series]
+      Note this is 1 item longer, as it includes deployment history as
+      initialised
+
+    """
     # Validate the SPORES configuration.
     validate_spores_configuration(spores_config)
 
@@ -72,55 +79,61 @@ def run_spores(
         + least_cost_network.statistics.opex().sum()
     )
 
-    # Initialize collectors to store results/history
-    spore_networks = {}
-    weights_history = {}
-    spore_models = {}
-
-    # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
-    # solution's deployment so that it has a memory of the original least-cost solution.
-    deploy_his = [get_deployment(least_cost_network, asset_indices)]
-
     # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
     # copying networks with a solver_model attached, so we need to remove it first.
     if least_cost_network and hasattr(least_cost_network.model, "solver_model"):
         least_cost_network.model.solver_model = None
 
-    # Run SPORES
-    for i in range(1, config_data["num_spores"] + 1):
-        if i == 1:
-            # Previous weights are needed for the relative_deployment weighting methods.
-            prev_weights = initialize_weights(asset_indices)
+    # Previous weights are needed for the relative_deployment weighting methods.
+    nspores: int = config_data["num_spores"]
+    # NOTE: for a uniform return value shape, we could also add the
+    # initial network, and None for the solution for these two.
+    spore_networks = []
+    spore_models = []
 
-            # Calculation of new weights in the 1st iteration depends on the `spores_mode`.
-            new_weights = calculate_weights_first_iteration(
-                deploy_his[-1] / max_capacities,
-                config_data["spores_mode"],
-                prev_weights,
-            )
+    initial_weights = pd.Series(0.0, index=asset_indices, name="weights")
+    weights_history = [initial_weights]
+    # weights_history = pd.concat([weights] * nspores, axis=1, ignore_index=True)
 
-        else:
-            # Dispatch to the correct weighting method
-            if weighting_method == "random":
+    # Deployment history is needed for `evolving_*` weighting methods. Initialize the history with the least-cost
+    # solution's deployment so that it has a memory of the original least-cost solution.
+    deploy_his = [get_deployment(least_cost_network, asset_indices)]
+
+    # run SPORES
+    for i in range(nspores):
+        match weighting_method:
+            case "random":
                 new_weights = set_weights_random(asset_indices, upper_bound)
-            else:
-                deployment = deploy_his[-1]
-                if weighting_method in [
-                    "relative_deployment",
-                    "relative_deployment_normalized",
-                ]:
-                    weights = weights_history[f"weights_{i - 1}"]
-                    deployment = (
-                        deployment / max_capacities
-                    )  # don't overwrite the history reference
-                elif weighting_method == "evolving_median":
-                    weights = pd.concat(deploy_his, axis="columns").median(axis=1)
-                elif weighting_method == "evolving_average":
-                    weights = pd.concat(deploy_his, axis="columns").mean(axis=1)
-
-                new_weights = dispatch_to_correct_weighting_method(
-                    deployment, weights, weighting_method
+            case str(v) if "relative_deployment" in v:
+                # don't overwrite the history reference
+                rel_deployment = deploy_his[-1] / max_capacities
+                normalize = "normalized" in weighting_method
+                new_weights = calculate_weights_relative_deployment(
+                    rel_deployment, weights_history[-1], normalize=normalize
                 )
+            case "evolving_average":
+                weights = pd.concat(deploy_his, axis="columns").mean(axis=1)
+                new_weights = calculate_weights_evolving(deploy_his[-1], weights)
+            case "evolving_median":
+                weights = pd.concat(deploy_his, axis="columns").median(axis=1)
+                new_weights = calculate_weights_evolving(deploy_his[-1], weights)
+            case _:
+                raise RuntimeError(f"{weighting_method=} unknown")
+
+        if i == 0 and config_data["spores_mode"] == "intensify and diversify":
+            # FIXME: The current refactor is bug for bug same as the
+            # initial implementation.  However, I don't think this
+            # implementation is correct (see
+            # calculate_weights_first_iteration docstring from commit
+            # history), this special treatment for weights only
+            # happens for the first iteration.
+            #
+            # FIXME: overwrite weights for first iteration if mode is
+            # "intensify and diversify", this has a minor compute
+            # overhead since we throw away the usual calculation; this
+            # is for simplicity of implementation.  Refactor if you
+            # find an alternative that does not sacrifice simplicity.
+            new_weights = weights_history[-1]
 
         network = least_cost_network.copy()
         # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
@@ -131,29 +144,14 @@ def run_spores(
             network, modified_model, solver_options
         )
 
-        weights_history[f"weights_{i}"] = new_weights
-        spore_networks[f"spore_{i}"] = new_spore
-        spore_models[f"model_{i}"] = solved_model
+        weights_history.append(new_weights)
+        spore_networks.append(new_spore)
+        spore_models.append(solved_model)
 
         # Needed for evolving_median and evolving_average weighting methods
         deploy_his.append(get_deployment(new_spore, asset_indices))
 
-    return spore_networks, weights_history, spore_models, deploy_his
-
-
-def dispatch_to_correct_weighting_method(
-    deployment: pd.Series, weights: pd.Series, weighting_method: str
-) -> pd.Series:
-    """Calculate weights based on the given weighting method"""
-    weighting_functions = {
-        "relative_deployment": calculate_weights_relative_deployment,
-        "relative_deployment_normalized": partial(
-            calculate_weights_relative_deployment, normalize=True
-        ),
-        "evolving_average": calculate_weights_evolving,
-        "evolving_median": calculate_weights_evolving,
-    }
-    return weighting_functions[weighting_method](deployment, weights)
+    return spore_networks, spore_models, weights_history, deploy_his
 
 
 def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
@@ -165,11 +163,6 @@ def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
         for asset in component_info["index"]
     ]
     return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
-
-
-def initialize_weights(indices: pd.MultiIndex) -> pd.Series:
-    """Initialize the weights of all extendable technologies in the network."""
-    return pd.Series(0.0, index=indices, name="weights")
 
 
 def set_weights_random(asset_indices: pd.MultiIndex, upper_bound: int) -> pd.Series:
@@ -245,32 +238,6 @@ def calculate_weights_evolving(
     # If the deployment of an asset is 0, we want to encourage the deployment of this technology.
     new_weights[average_deployment == 0] = 0.0
     return new_weights
-
-
-def calculate_weights_first_iteration(
-    relative_deployment: pd.Series, spores_mode: str, prev_weights: pd.Series
-) -> pd.Series:
-    """Calculate weights for the first iteration of SPORES based on spores_mode.
-
-    This function ensures that we either start with zero weights (intensify) or
-    start with weights based on the least-cost solution (diversify).
-
-    If `spores_mode` is "intensify and diversify", it sets the `new_weights` to
-    be the same as the `prev_weights`. This is done so that the start of the
-    exploration for subsequent SPORES is focused around the previously found
-    intensified solution.
-
-    If `spores_mode` is "diversify", it simply calls the `calculate_weights`
-    function that compute `new_weights` as the sum of the `prev_weight`(which is
-    0 in the first iteration) and the relative deployment of techs in the
-    previously found diversified solution (in which case, is the least-cost
-    solution since it is the first iteration). This is done so that the
-    exploration of the solution space starts from the least-cost solution.
-    """
-    if spores_mode == "intensify and diversify":
-        return prev_weights
-
-    return calculate_weights_relative_deployment(relative_deployment, prev_weights)
 
 
 def validate_spores_configuration(config: dict):
