@@ -1,11 +1,10 @@
 # yaml configuration file for running SPORES
 SPORES:
   config_name: "diversify"
-  objective_sense: min
   spores_slack: 0.1
   num_spores: 10
   weighting_method: "evolving_average"
-  spores_mode: "diversify"  # Should be either "diversify" or "intensify and diversify"
+  intensify: false
   diversification_coefficient: 1  # Must be a positive number.
   spore_technologies: # Target technologies when running SPORES.
     - component: Generator

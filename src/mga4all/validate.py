@@ -50,14 +50,10 @@ class SporesConfig(BaseModel):
     diversification_coefficient: PositiveFloat
     """Diversification coefficient, must be positive. ..."""
 
-    objective_sense: Literal["min"]
-    """Set to 'min' for minimization. To maximize, please set the `diversification_coefficient`
-    and/or `intensification_coefficient` to negative.
-    """
     weighting_method: WeightingMethod
     """Which method should be used to update weights after each iteration."""
-    spores_mode: Literal["diversify", "intensify and diversify"]
-    """Mode in which SPORES should run: `diversify` or `intensify and diversify`."""
+    intensify: bool
+    """Toggle if SPORES should include an intensification step."""
 
     spore_technologies: list[AssetGroup] = Field(min_length=1)
     """Which technologies to target during the SPORES run."""
@@ -71,17 +67,16 @@ class SporesConfig(BaseModel):
     @model_validator(mode="after")
     def check_intensification_options(self) -> Self:
         """Check that intensification options are present when that mode is selected."""
-        intensify_mode = self.spores_mode == "intensify and diversify"
         lacks_coefficient = self.intensification_coefficient is None
         lacks_intensifiable = (
             self.intensifiable_technologies is None
             or len(self.intensifiable_technologies) == 0
         )
 
-        if intensify_mode and (lacks_coefficient or lacks_intensifiable):
+        if self.intensify and (lacks_coefficient or lacks_intensifiable):
             raise ValueError(
                 "`intensification_coefficient` and `intensifiable_technologies` "
-                "must be both provided for mode `intensify and diversify`."
+                "must be both provided when `intensify` is `True`."
             )
         elif lacks_coefficient is not lacks_intensifiable:  # XOR
             raise ValueError(

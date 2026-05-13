@@ -11,9 +11,8 @@ from mga4all.validate import validate_spores_configuration
         "num_spores",
         "spores_slack",
         "diversification_coefficient",
-        "objective_sense",
         "weighting_method",
-        "spores_mode",
+        "intensify",
         "spore_technologies",
     ],
 )
@@ -31,9 +30,8 @@ def test_missing_keys(key, pypsa_spores_config):
         ("num_spores", -1),
         ("spores_slack", -1),
         ("diversification_coefficient", -1),
-        ("objective_sense", "max"),
         ("weighting_method", "constant"),
-        ("spores_mode", "intensify"),
+        ("intensify", None),
         ("spore_technologies", []),
     ],
 )
@@ -56,13 +54,13 @@ def test_invalid_values(key, value, pypsa_spores_config):
 def test_missing_intensification_options(values, pypsa_spores_config):
     """Test that missing intensification options are caught when mode includes `intensify`."""
     spores_config = pypsa_spores_config["SPORES"]
-    spores_config["spores_mode"] = "intensify and diversify"
+    spores_config["intensify"] = True
     for key, value in values.items():
         spores_config[key] = value
 
     with pytest.raises(ValidationError) as exception_info:
         validate_spores_configuration(pypsa_spores_config)
-    assert "provided for mode `intensify and diversify`" in str(exception_info.value)
+    assert "provided when `intensify` is `True`" in str(exception_info.value)
 
 
 @pytest.mark.parametrize(
@@ -73,7 +71,7 @@ def test_missing_intensification_options(values, pypsa_spores_config):
     ],
     ids=["missing coefficient", "missing technologies"],
 )
-def test_missing_intensification_options(values, pypsa_spores_config):
+def test_missing_optional_intensification_options(values, pypsa_spores_config):
     """Test that a lacking intensification option is caught."""
     spores_config = pypsa_spores_config["SPORES"]
     for key, value in values.items():

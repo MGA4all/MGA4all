@@ -35,7 +35,6 @@ def run_spores(
 
     config_data = spores_config["SPORES"]
 
-    # Build nested dict containing spore_techs once to avoid rebuilding again in downstream functions.
     asset_indices = get_asset_multi_index(config_data)
 
     # If no method is passed to the function, get it from the config file.
@@ -78,9 +77,9 @@ def run_spores(
             # Previous weights are needed for the relative_deployment weighting methods.
             prev_weights = initialize_weights(asset_indices)
 
-            # Calculation of new weights in the 1st iteration depends on the `spores_mode`.
+            # Calculation of new weights in the 1st iteration depends on the `intensify` toggle.
             new_weights = calculate_weights_first_iteration(
-                network, config_data["spores_mode"], prev_weights
+                network, config_data["intensify"], prev_weights
             )
 
         else:
@@ -247,9 +246,9 @@ def calculate_weights_evolving(
 
 
 def calculate_weights_first_iteration(
-    n: pypsa.Network, spores_mode: str, prev_weights: pd.Series
+    n: pypsa.Network, intensify: bool, prev_weights: pd.Series
 ) -> pd.Series:
-    """Calculate weights for the first iteration of SPORES based on spores_mode.
+    """Calculate weights for the first iteration of SPORES based on `intensify`.
 
     This function ensures that we either start with zero weights (intensify) or
     start with weights based on the least-cost solution (diversify).
@@ -257,19 +256,18 @@ def calculate_weights_first_iteration(
     This function assumes that `network` is the least-cost optimized network and
     `prev_weights` is 0 for all techs. There are 2 methods to compute new weights:
 
-    If `spores_mode` is "intensify and diversify", it sets the `new_weights` to
-    be thesame as the `prev_weights`. This is done so that the start of the
-    exploration for subsequent SPORES is focused around the previously found
-    intensified solution.
+    If `intensify` is `True`, it sets the `new_weights` to be the same as the
+    `prev_weights`. This is done so that the start of the exploration for
+    subsequent SPORES is focused around the previously found intensified solution.
 
-    If `spores_mode` is "diversify", it simply calls the `calculate_weights`
+    If `intensify` is `False`, it simply calls the `calculate_weights`
     function that compute `new_weights` as the sum of the `prev_weight`(which is
     0 in the first iteration) and the relative deployment of techs in the
     previously found diversified solution (in which case, is the least-cost
     solution since it is the first iteration). This is done so that the
     exploration of the solution space starts from the least-cost solution.
     """
-    if spores_mode == "intensify and diversify":
+    if intensify:
         return prev_weights
 
     return calculate_weights_relative_deployment(n, prev_weights)
@@ -349,8 +347,6 @@ def modify_objective(
     n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: dict
 ) -> linopy.Model:
     """Modify the objective function to optimize technology capacities instead of costs."""
-    sense = parse_objective_sense(configuration["objective_sense"])
-    spores_mode = configuration["spores_mode"]
     diversification_coeff = float(configuration.get("diversification_coefficient"))
     intensification_coeff = configuration.get("intensification_coefficient")
     if intensification_coeff is not None:
@@ -369,16 +365,15 @@ def modify_objective(
 
         capacity_variable = m[f"{component}-{attribute}"]
 
-        diversification_final_coeffs = diversification_coeff * tech_weights * sense
+        diversification_final_coeffs = diversification_coeff * tech_weights
 
         # Build intensification terms, starting with zeros
         intensification_final_coeffs = pd.Series(0.0, index=tech_weights.index)
 
-        if spores_mode == "intensify and diversify" and intensification_coeff != 0:
+        if configuration["intensify"] and intensification_coeff != 0:
             intensify_mask = tech_weights.index.isin(intensifiable_technologies)
-            intensification_value = intensification_coeff * sense
             # Apply the value only to the selected technologies
-            intensification_final_coeffs[intensify_mask] = intensification_value
+            intensification_final_coeffs[intensify_mask] = intensification_coeff
 
         # Add the coefficient Series together first
         combined_final_coeffs = (
@@ -392,13 +387,3 @@ def modify_objective(
     m.objective = sum(objective_expressions)
 
     return m
-
-
-def parse_objective_sense(sense: str) -> int:
-    """Parse the sense of the objective function."""
-    if sense == "min":
-        return 1
-    elif sense == "max":
-        return -1
-    else:
-        raise ValueError(f"Unknown sense: {sense}. Use 'min' or 'max'.")
