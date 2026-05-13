@@ -97,10 +97,13 @@ class SporesConfig(BaseModel):
             for asset_group in self.spore_technologies
             for asset in asset_group.assets
         }
-        if not set(self.intensifiable_technologies).issubset(spores_asset_names):
+        
+        difference = set(self.intensifiable_technologies) - spores_asset_names
+        if len(difference) != 0:
             raise ValueError(
-                "All assets listed under `intensifiable_technologies` must be previously defined "
-                "under `spores_technologies`."
+                "The following assets listed under `intensifiable_technologies` were not "
+                "previously defined under `spores_technologies`:\n"
+                + "\n".join(difference)
             )
 
         return self

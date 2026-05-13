@@ -90,7 +90,7 @@ def test_intensifiable_subset(pypsa_spores_config):
 
     with pytest.raises(ValidationError) as exception_info:
         validate_spores_configuration(pypsa_spores_config)
-    assert "must be previously defined" in str(exception_info.value)
+    assert "were not previously defined" in str(exception_info.value)
 
 
 def test_duplicates(pypsa_spores_config):
