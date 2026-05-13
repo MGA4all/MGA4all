@@ -2,23 +2,7 @@
 
 import pandas as pd
 
-from mga4all.spores import (
-    initialize_weights,
-    calculate_weights_relative_deployment,
-)
-
-
-def test_relative_deployment_first_iteration(asset_indices):
-    """Tests the cumulative method on the first iteration where prev_weights are zero."""
-    # On the first iteration, prev_weights are all zero.
-    relative_deployment = pd.Series([0.8, 0.2, 0.0], index=asset_indices)
-    prev_weights = initialize_weights(asset_indices)
-
-    # Expected output is simply the relative deployment of the least-cost solution.
-    expected = relative_deployment
-
-    actual = calculate_weights_relative_deployment(relative_deployment, prev_weights)
-    pd.testing.assert_series_equal(actual, expected)
+from mga4all.spores import calculate_weights_relative_deployment
 
 
 def test_relative_deployment_subsequent_iteration(asset_indices):
@@ -110,14 +94,9 @@ def test_calculate_weights_relative_deployment_normalized_all_zero_case(
     asset_indices,
 ):
     """Tests that the function handles the case of all-zero weights without a ZeroDivisionError."""
-    relative_deployment = pd.Series([0.0, 0.0, 0.0], index=asset_indices)
-    prev_weights = initialize_weights(asset_indices)  # All zeros
-    # Cumulative sum is all zeros, max weight is 0.
-
-    # The function should not normalize and just return zeros.
-    expected = pd.Series([0.0, 0.0, 0.0], index=asset_indices)
+    zeros = pd.Series(0.0, index=asset_indices)  # All zeros
 
     actual = calculate_weights_relative_deployment(
-        relative_deployment, prev_weights, normalize=True
+        zeros, zeros, normalize=True
     )
-    pd.testing.assert_series_equal(actual, expected)
+    pd.testing.assert_series_equal(actual, zeros)
