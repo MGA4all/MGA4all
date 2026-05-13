@@ -1,4 +1,5 @@
-from typing import Annotated, Literal, get_args, TypeAlias
+from enum import StrEnum, auto
+from typing import Annotated
 from typing_extensions import Self
 
 from pydantic import (
@@ -10,21 +11,24 @@ from pydantic import (
     model_validator,
 )
 
-WeightingMethod: TypeAlias = Literal[
-    "random",
-    "evolving_median",
-    "evolving_average",
-    "relative_deployment",
-    "relative_deployment_normalized",
-]
-WEIGHTING_METHODS: frozenset[WeightingMethod] = frozenset(get_args(WeightingMethod))
+class WeightingMethod(StrEnum):
+    RANDOM = auto()
+    EVOLVING_MEDIAN = auto()
+    EVOLVING_AVERAGE = auto()
+    RELATIVE_DEPLOYMENT = auto()
+    RELATIVE_DEPLOYMENT_NORMALIZED = auto()
 
-PyPSAComponent: TypeAlias = Literal[
-    "Generator", "Line", "Transformer", "Link", "Store", "StorageUnit"
-]
+class PyPSAComponent(StrEnum):
+    GENERATOR = "Generator"
+    LINE = "Line"
+    TRANSFORMER = "Transformer"
+    LINK = "Link"
+    STORE = "Store"
+    STORAGEUNIT = "StorageUnit"
+
 PYPSA_DATAFRAME_NAMES: dict[PyPSAComponent, str] = dict(
     zip(
-        get_args(PyPSAComponent),
+        PyPSAComponent,
         ["generators", "lines", "transformers", "links", "stores", "storage_units"],
     )
 )

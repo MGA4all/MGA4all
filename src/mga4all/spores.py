@@ -9,7 +9,6 @@ import pypsa
 
 from .validate import (
     validate_spores_configuration,
-    WEIGHTING_METHODS,
     PYPSA_DATAFRAME_NAMES,
 )
 
@@ -21,7 +20,6 @@ def run_spores(
     least_cost_network: pypsa.Network,
     spores_config: dict,
     solver_options: dict,
-    weighting_method: str | None = None,
     upper_bound: int = 100,
 ) -> tuple[
     dict[str, pypsa.Network],
@@ -30,21 +28,11 @@ def run_spores(
     list[pd.Series],
 ]:
     """Run the SPORES optimization to generate multiple near-optimal solutions."""
-    # Validate the SPORES configuration.
     validate_spores_configuration(spores_config)
 
     config_data = spores_config["SPORES"]
-
+    weighting_method = config_data.get("weighting_method")
     asset_indices = get_asset_multi_index(config_data)
-
-    # If no method is passed to the function, get it from the config file.
-    if weighting_method is None:
-        weighting_method = config_data.get("weighting_method")
-
-    if weighting_method not in WEIGHTING_METHODS:
-        raise ValueError(
-            f"Unsupported {weighting_method=}, must be one of {WEIGHTING_METHODS}."
-        )
 
     # Get the least-cost optimal solution from the solved network.
     # Check if the network is already optimized, else raise an error.
@@ -278,7 +266,7 @@ def optimize_model_and_assign_solution_to_network(
     n: pypsa.Network,
     m: linopy.Model,
     solver_options: dict,
-    env: gp.Env = None,
+    env: gp.Env | None = None,
 ) -> tuple[pypsa.Network, linopy.Model]:
     """Optimize a model and assign the solution back to the pypsa network for analysis."""
     solver_name = list(solver_options.keys())[0]
