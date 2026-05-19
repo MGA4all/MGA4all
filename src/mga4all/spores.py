@@ -10,6 +10,7 @@ import pypsa
 from .validate import (
     validate_spores_configuration,
     PYPSA_DATAFRAME_NAMES,
+    WeightingMethod,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -78,25 +79,25 @@ def run_spores(
             prev_spore = spore_networks[f"spore_{i - 1}"]
 
             # Dispatch to the correct weighting method
-            if weighting_method == "random":
+            if weighting_method == WeightingMethod.RANDOM:
                 new_weights = set_weights_random(asset_indices, upper_bound)
 
-            elif weighting_method == "relative_deployment":
+            elif weighting_method == WeightingMethod.RELATIVE_DEPLOYMENT:
                 new_weights = calculate_weights_relative_deployment(
                     prev_spore, prev_weights
                 )
 
-            elif weighting_method == "relative_deployment_normalized":
+            elif weighting_method == WeightingMethod.RELATIVE_DEPLOYMENT_NORMALIZED:
                 new_weights = calculate_weights_relative_deployment_normalized(
                     prev_spore, prev_weights
                 )
 
-            elif weighting_method == "evolving_median":
+            elif weighting_method == WeightingMethod.EVOLVING_MEDIAN:
                 new_weights = calculate_weights_evolving(
                     prev_spore, deploy_his, asset_indices, median_deployment
                 )
 
-            elif weighting_method == "evolving_average":
+            elif weighting_method == WeightingMethod.EVOLVING_AVERAGE:
                 new_weights = calculate_weights_evolving(
                     prev_spore, deploy_his, asset_indices, average_deployment
                 )
