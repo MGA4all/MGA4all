@@ -96,7 +96,5 @@ def test_calculate_weights_relative_deployment_normalized_all_zero_case(
     """Tests that the function handles the case of all-zero weights without a ZeroDivisionError."""
     zeros = pd.Series(0.0, index=asset_indices)  # All zeros
 
-    actual = calculate_weights_relative_deployment(
-        zeros, zeros, normalize=True
-    )
+    actual = calculate_weights_relative_deployment(zeros, zeros, normalize=True)
     pd.testing.assert_series_equal(actual, zeros)

@@ -26,8 +26,7 @@ def test_modify_objective_diversify_only(asset_indices):
     n, m = setup_model_and_network()
     weights = pd.Series([0.5, 1.0, 0.0], index=asset_indices)
     config = {
-        "objective_sense": "min",
-        "spores_mode": "diversify",
+        "intensify": False,
         "diversification_coefficient": 10,
     }
 
@@ -54,8 +53,7 @@ def test_modify_objective_intensify_and_diversify(asset_indices):
     n, m = setup_model_and_network()
     weights = pd.Series([0.5, 1.0, 0.2], index=asset_indices)
     config = {
-        "objective_sense": "min",
-        "spores_mode": "intensify and diversify",
+        "intensify": True,
         "diversification_coefficient": 10,
         "intensification_coefficient": 100,
         "intensifiable_technologies": ["gas"],
@@ -64,24 +62,6 @@ def test_modify_objective_intensify_and_diversify(asset_indices):
     capacity_vars = m.variables["Generator-p_nom"]
     expected_coeffs = pd.Series(
         {"solar": 5.0, "wind": 10.0, "gas": 102.0}, index=n.generators.index
-    )
-    expected_expr = (expected_coeffs * capacity_vars).sum()
-    assert_linequal(m.objective.expression, expected_expr)
-
-
-def test_modify_objective_maximization_sense(asset_indices):
-    """Tests that an 'objective_sense' of 'max' correctly negates the coefficients."""
-    n, m = setup_model_and_network()
-    weights = pd.Series([0.5, 1.0, 0.0], index=asset_indices)
-    config = {
-        "objective_sense": "max",
-        "spores_mode": "diversify",
-        "diversification_coefficient": 10,
-    }
-    m = modify_objective(n, m, weights, config)
-    capacity_vars = m.variables["Generator-p_nom"]
-    expected_coeffs = pd.Series(
-        {"solar": -5.0, "wind": -10.0, "gas": 0.0}, index=n.generators.index
     )
     expected_expr = (expected_coeffs * capacity_vars).sum()
     assert_linequal(m.objective.expression, expected_expr)

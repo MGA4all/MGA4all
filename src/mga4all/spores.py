@@ -1,5 +1,4 @@
 import logging
-import numbers
 
 import gurobipy as gp
 import linopy
@@ -7,55 +6,29 @@ import numpy as np
 import pandas as pd
 import pypsa
 
+from .validate import (
+    validate_spores_configuration,
+    PYPSA_DATAFRAME_NAMES,
+    WeightingMethod,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-PYPSA_DATAFRAME_NAMES = {
-    "Generator": "generators",
-    "Line": "lines",
-    "Transformer": "transformers",
-    "Link": "links",
-    "Store": "stores",
-    "StorageUnit": "storage_units",
-}
-
-WEIGHTING_METHODS = frozenset(
-    [
-        "random",
-        "evolving_median",
-        "evolving_average",
-        "relative_deployment",
-        "relative_deployment_normalized",
-    ]
-)
 
 
 def run_spores(
     least_cost_network: pypsa.Network,
     spores_config: dict,
     solver_options: dict,
-    weighting_method: str | None = None,
     upper_bound: int = 100,
 ) -> list[pypsa.Network]:
     """Run the SPORES optimization to generate multiple near-optimal solutions."""
-    # Validate the SPORES configuration.
     validate_spores_configuration(spores_config)
 
     config_data = spores_config["SPORES"]
-
-    # Build nested dict containing spore_techs once to avoid rebuilding again in downstream functions.
+    weighting_method = config_data.get("weighting_method")
     asset_indices = get_asset_multi_index(config_data)
     max_capacities = get_max_capacities(least_cost_network, asset_indices)
-
-    # If no method is passed to the function, get it from the config file.
-    if weighting_method is None:
-        weighting_method = config_data.get("weighting_method")
-
-    if weighting_method not in WEIGHTING_METHODS:
-        raise ValueError(
-            f"Unsupported {weighting_method=}, must be one of {WEIGHTING_METHODS}."
-        )
 
     # Get the least-cost optimal solution from the solved network.
     # Check if the network is already optimized, else raise an error.
@@ -71,40 +44,45 @@ def run_spores(
 
     # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
     # solution's deployment so that it has a memory of the original least-cost solution.
-    deploy_his = pd.DataFrame({"init": get_deployment(least_cost_network, asset_indices)})
+    deploy_his = pd.DataFrame(
+        {"init": get_deployment(least_cost_network, asset_indices)}
+    )
 
     # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
     # copying networks with a solver_model attached, so we need to remove it first.
     if least_cost_network and hasattr(least_cost_network.model, "solver_model"):
         least_cost_network.model.solver_model = None
 
-    initial_weights = pd.Series(0.0, index=asset_indices, name="weights")
+    prev_weights = pd.Series(0.0, index=asset_indices, name="weights")
 
     # Run SPORES
     for i in range(config_data["num_spores"]):
         if i == 0:
-
-            if config_data["spores_mode"] == "intensify and diversify":
-                new_weights = initial_weights
+            if config_data["intensify"]:
+                new_weights = prev_weights
             else:
                 relative_deployment = deploy_his["init"] / max_capacities
-                new_weights = calculate_weights_relative_deployment(relative_deployment, initial_weights)
+                new_weights = calculate_weights_relative_deployment(
+                    relative_deployment, prev_weights
+                )
 
         else:
             match weighting_method:
-                case "random":
+                case WeightingMethod.RANDOM:
                     new_weights = set_weights_random(asset_indices, upper_bound)
-                case str(v) if "relative_deployment" in v:
-                    # don't overwrite the history reference
+                case (
+                    WeightingMethod.RELATIVE_DEPLOYMENT
+                    | WeightingMethod.RELATIVE_DEPLOYMENT_NORMALIZED
+                ):
                     rel_deployment = deploy_his[i - 1] / max_capacities
                     normalize = "normalized" in weighting_method
                     new_weights = calculate_weights_relative_deployment(
                         rel_deployment, prev_weights, normalize=normalize
                     )
-                case "evolving_average":
+                case WeightingMethod.EVOLVING_AVERAGE:
                     weights = deploy_his.mean(axis=1)
                     new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
-                case "evolving_median":
+                case WeightingMethod.EVOLVING_MEDIAN:
                     weights = deploy_his.median(axis=1)
                     new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
                 case _:
@@ -131,10 +109,9 @@ def run_spores(
 def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
     """Unpack the spore technologies information into a flat datastructure."""
     entries = [
-        (component_name, component_info["attribute"], asset)
-        for technology in configuration["spore_technologies"]
-        for component_name, component_info in technology.items()
-        for asset in component_info["index"]
+        (asset_group["component"], asset_group["attribute"], asset)
+        for asset_group in configuration["spore_technologies"]
+        for asset in asset_group["assets"]
     ]
     return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
 
@@ -214,182 +191,12 @@ def calculate_weights_evolving(
     return new_weights
 
 
-def calculate_weights_first_iteration(
-    relative_deployment: pd.Series, spores_mode: str, prev_weights: pd.Series
-) -> pd.Series:
-    """Calculate weights for the first iteration of SPORES based on spores_mode.
-
-    This function ensures that we either start with zero weights (intensify) or
-    start with weights based on the least-cost solution (diversify).
-
-    If `spores_mode` is "intensify and diversify", it sets the `new_weights` to
-    be the same as the `prev_weights`. This is done so that the start of the
-    exploration for subsequent SPORES is focused around the previously found
-    intensified solution.
-
-    If `spores_mode` is "diversify", it simply calls the `calculate_weights`
-    function that compute `new_weights` as the sum of the `prev_weight`(which is
-    0 in the first iteration) and the relative deployment of techs in the
-    previously found diversified solution (in which case, is the least-cost
-    solution since it is the first iteration). This is done so that the
-    exploration of the solution space starts from the least-cost solution.
-    """
-    if spores_mode == "intensify and diversify":
-        return prev_weights
-
-    return calculate_weights_relative_deployment(relative_deployment, prev_weights)
-
-
-def validate_spores_configuration(config: dict):
-    """Validate a SPORES YAML config against the specified requirements."""
-    if "SPORES" not in config:
-        raise ValueError("Missing top-level key: 'SPORES'.")
-    spores_config = config["SPORES"]
-
-    # Must have config_name which will be used in the output folder name to save results.
-    if (
-        "config_name" not in spores_config
-        or not isinstance(spores_config["config_name"], str)
-        or not spores_config["config_name"].strip()
-    ):
-        raise ValueError("'config_name' must be provided as a non-empty string.")
-
-    # Required keys
-    required_keys_in_spores_config = [
-        "objective_sense",
-        "spores_slack",
-        "num_spores",
-        "weighting_method",
-        "spores_mode",
-        "diversification_coefficient",
-        "spore_technologies",
-    ]
-
-    for key in required_keys_in_spores_config:
-        if key not in spores_config:
-            raise ValueError(f"Missing required key: '{key}'.")
-
-    # objective_sense must be min for consistency.
-    if spores_config["objective_sense"] != "min":
-        raise ValueError(
-            "'objective_sense' must be 'min'. To maximize, please set the 'diversification_coefficient' "
-            "and/or 'intensification_coefficient' to negative."
-        )
-
-    # spores_slack must be between 0 and 1
-    if not isinstance(spores_config["spores_slack"], numbers.Number) or not (
-        0 <= spores_config["spores_slack"] <= 1
-    ):
-        raise ValueError("'spores_slack' must be a number between 0 and 1.")
-
-    # num_spores must be integer >= 1
-    if (
-        not isinstance(spores_config["num_spores"], int)
-        or spores_config["num_spores"] < 1
-    ):
-        raise ValueError("'num_spores' must be an integer >= 1.")
-
-    # weighting_method must be valid
-    if spores_config["weighting_method"] not in WEIGHTING_METHODS:
-        raise ValueError(
-            f"Unsupported {spores_config['weighting_method']=}, must be one of {WEIGHTING_METHODS}."
-        )
-
-    # spores_mode must be valid
-    if spores_config["spores_mode"] not in ["diversify", "intensify and diversify"]:
-        raise ValueError(
-            "'spores_mode' must be either 'diversify' or 'intensify and diversify'."
-        )
-
-    # diversification_coefficient must be positive number
-    diversification_coeff = spores_config["diversification_coefficient"]
-    try:
-        diversification_coeff = float(diversification_coeff)
-    except (TypeError, ValueError):
-        raise ValueError("'diversification_coefficient' must be a number.")
-
-    if diversification_coeff <= 0:
-        raise ValueError("'diversification_coefficient' must be a positive number.")
-
-    # spore_technologies cannot be empty
-    spore_technologies = spores_config["spore_technologies"]
-    if not isinstance(spore_technologies, list) or not spore_technologies:
-        raise ValueError("'spore_technologies' must be a non-empty list.")
-
-    # Keys of spore_technologies must be in valid_tech_type
-    valid_tech_type = PYPSA_DATAFRAME_NAMES.keys()
-    for tech_top_key in spore_technologies:
-        if not isinstance(tech_top_key, dict) or len(tech_top_key) != 1:
-            raise ValueError(
-                "Each element in 'spore_technologies' must be a dict with a single top-level pypsa-component key."
-            )
-        component = next(iter(tech_top_key))
-        if component not in valid_tech_type:
-            raise ValueError(
-                f"Invalid pypsa-component '{component}' in 'spore_technologies'. Must be one of {valid_tech_type}."
-            )
-
-        # Extra sanity check: each must have attribute and index keys
-        tech_data = tech_top_key[component]
-        if "attribute" not in tech_data or not isinstance(tech_data["attribute"], str):
-            raise ValueError(
-                f"Component '{component}' must define an 'attribute' key with a string value."
-            )
-        if (
-            "index" not in tech_data
-            or not isinstance(tech_data["index"], list)
-            or not tech_data["index"]
-        ):
-            raise ValueError(
-                f"Component '{component}' must define a non-empty 'index' list."
-            )
-
-    # If spores_mode is "intensify and diversify", extra checks
-    if spores_config["spores_mode"] == "intensify and diversify":
-        try:
-            spores_config["intensification_coefficient"] = float(
-                spores_config["intensification_coefficient"]
-            )
-        except (KeyError, TypeError, ValueError):
-            raise ValueError(
-                "'intensification_coefficient' must be provided as a number for spores_mode 'intensify and diversify'."
-            )
-        if (
-            "intensifiable_technologies" not in spores_config
-            or not isinstance(spores_config["intensifiable_technologies"], list)
-            or not spores_config["intensifiable_technologies"]
-        ):
-            raise ValueError(
-                "'intensifiable_technologies' must be a non-empty list when 'spores_mode' is 'intensify and diversify'."
-            )
-
-    # Coupling rule: intensification_coefficient and intensifiable_technologies must be both present or both absent
-    has_coeff = "intensification_coefficient" in spores_config
-    has_intensifiable = "intensifiable_technologies" in spores_config
-    if has_coeff != has_intensifiable:  # XOR
-        raise ValueError(
-            "'intensification_coefficient' and 'intensifiable_technologies' must be provided or omitted together."
-        )
-
-    # Extra check: No duplicate component-index pairs in spore_technologies
-    seen_pairs = set()
-    for tech in spore_technologies:
-        comp = next(iter(tech))
-        for idx in tech[comp]["index"]:
-            pair = (comp, idx)
-            if pair in seen_pairs:
-                raise ValueError(f"Duplicate technology entry found: {pair}")
-            seen_pairs.add(pair)
-
-    return True
-
-
 # ======================== Pypsa/linopy related code implementation section ========================
 def optimize_model_and_assign_solution_to_network(
     n: pypsa.Network,
     m: linopy.Model,
     solver_options: dict,
-    env: gp.Env = None,
+    env: gp.Env | None = None,
 ) -> tuple[pypsa.Network, linopy.Model]:
     """Optimize a model and assign the solution back to the pypsa network for analysis."""
     solver_name = list(solver_options.keys())[0]
@@ -460,8 +267,6 @@ def modify_objective(
     n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: dict
 ) -> linopy.Model:
     """Modify the objective function to optimize technology capacities instead of costs."""
-    sense = parse_objective_sense(configuration["objective_sense"])
-    spores_mode = configuration["spores_mode"]
     diversification_coeff = float(configuration.get("diversification_coefficient"))
     intensification_coeff = configuration.get("intensification_coefficient")
     if intensification_coeff is not None:
@@ -480,16 +285,15 @@ def modify_objective(
 
         capacity_variable = m[f"{component}-{attribute}"]
 
-        diversification_final_coeffs = diversification_coeff * tech_weights * sense
+        diversification_final_coeffs = diversification_coeff * tech_weights
 
         # Build intensification terms, starting with zeros
         intensification_final_coeffs = pd.Series(0.0, index=tech_weights.index)
 
-        if spores_mode == "intensify and diversify" and intensification_coeff != 0:
+        if configuration["intensify"] and intensification_coeff != 0:
             intensify_mask = tech_weights.index.isin(intensifiable_technologies)
-            intensification_value = intensification_coeff * sense
             # Apply the value only to the selected technologies
-            intensification_final_coeffs[intensify_mask] = intensification_value
+            intensification_final_coeffs[intensify_mask] = intensification_coeff
 
         # Add the coefficient Series together first
         combined_final_coeffs = (
@@ -503,13 +307,3 @@ def modify_objective(
     m.objective = sum(objective_expressions)
 
     return m
-
-
-def parse_objective_sense(sense: str) -> int:
-    """Parse the sense of the objective function."""
-    if sense == "min":
-        return 1
-    elif sense == "max":
-        return -1
-    else:
-        raise ValueError(f"Unknown sense: {sense}. Use 'min' or 'max'.")
