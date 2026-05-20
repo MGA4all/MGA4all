@@ -117,12 +117,10 @@ def evaluate_weights(
     optimal_cost = (
         base_network.statistics.capex().sum() + base_network.statistics.opex().sum()
     )
-    network = base_network.copy()
-    # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
-    modified_model = create_modified_model(network, config_data, optimal_cost, weights)
-    new_spore, solved_model = optimize_model_and_assign_solution_to_network(
-        network, modified_model, solver_options
-    )
+    new_spore = base_network.copy()
+
+    create_modified_model(new_spore, config_data, optimal_cost, weights)
+    optimize_model_and_assign_solution_to_network(new_spore, solver_options)
     return new_spore
 
 
@@ -213,11 +211,10 @@ def calculate_weights_evolving(
 
 # ======================== Pypsa/linopy related code implementation section ========================
 def optimize_model_and_assign_solution_to_network(
-    n: pypsa.Network,
-    m: linopy.Model,
+    network: pypsa.Network,
     solver_options: dict,
     env: gp.Env | None = None,
-) -> tuple[pypsa.Network, linopy.Model]:
+) -> None:
     """Optimize a model and assign the solution back to the pypsa network for analysis."""
     solver_name = list(solver_options.keys())[0]
     kwargs = solver_options[solver_name]
@@ -228,64 +225,34 @@ def optimize_model_and_assign_solution_to_network(
     else:
         logger.info(f"Solving model with {solver_name} without a managed environment.")
 
-    m.solve(solver_name=solver_name, **kwargs)
-
-    n.optimize.assign_solution()
-    n.optimize.assign_duals()
-
-    return n, m
+    network.model.solve(solver_name=solver_name, **kwargs)
+    network.optimize.assign_solution()
+    network.optimize.assign_duals()
 
 
 def create_modified_model(
-    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: pd.Series
-) -> linopy.Model:
+    network: pypsa.Network, configuration: dict, optimal_cost: float, weights: pd.Series
+) -> None:
     """Create the modified model (with the new objective and budget constraint) from the least-cost network."""
     # 1. Access the underlying linopy model of the least-cost pypsa network
-    m = n.optimize.create_model(
-        include_objective_constant=False
-    )  # suppress FutureWarning about objective constant
+    model = network.optimize.create_model(include_objective_constant=False)
 
     # 2. Add the budget constraint to the model
     slack = configuration["spores_slack"]
-    least_cost_objective = m.objective
+    least_cost_objective = model.objective
     if not isinstance(least_cost_objective, linopy.LinearExpression):
         least_cost_objective = least_cost_objective.expression
-    m.add_constraints(
+    model.add_constraints(
         least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint"
     )
 
     # 3. Modify the objective function
-    m = modify_objective(n, m, weights, configuration)
-
-    return m
-
-
-def modified_model_for_spores_run(
-    n: pypsa.Network,
-    m: linopy.Model,
-    configuration: dict,
-    optimal_cost: float,
-    weights: pd.Series,
-) -> linopy.Model:
-    """Modify the model given model to add the new objective function and budget constraint."""
-    # 1. Add the budget constraint to the model
-    slack = configuration["spores_slack"]
-    least_cost_objective = m.objective
-    if not isinstance(least_cost_objective, linopy.LinearExpression):
-        least_cost_objective = least_cost_objective.expression
-    m.add_constraints(
-        least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint"
-    )
-
-    # 2. Modify the objective function
-    m = modify_objective(n, m, weights, configuration)
-
-    return m
+    modify_objective(model, weights, configuration)
 
 
 def modify_objective(
-    n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: dict
-) -> linopy.Model:
+    model: linopy.Model, weights: pd.Series, configuration: dict
+) -> None:
     """Modify the objective function to optimize technology capacities instead of costs."""
     diversification_coeff = float(configuration.get("diversification_coefficient"))
     intensification_coeff = configuration.get("intensification_coefficient")
@@ -303,11 +270,6 @@ def modify_objective(
         # which would result in n^2 expression elements instead of just n
         tech_weights.index.name = None
 
-        capacity_variable = m[f"{component}-{attribute}"]
-
-        diversification_final_coeffs = diversification_coeff * tech_weights
-
-        # Build intensification terms, starting with zeros
         intensification_final_coeffs = pd.Series(0.0, index=tech_weights.index)
 
         if configuration["intensify"] and intensification_coeff != 0:
@@ -315,15 +277,13 @@ def modify_objective(
             # Apply the value only to the selected technologies
             intensification_final_coeffs[intensify_mask] = intensification_coeff
 
-        # Add the coefficient Series together first
         combined_final_coeffs = (
-            diversification_final_coeffs + intensification_final_coeffs
+            (diversification_coeff * tech_weights) + intensification_final_coeffs
         )
 
         # 4. Create a single, clean LinearExpression
+        capacity_variable = model[f"{component}-{attribute}"]
         objective_expressions.append((combined_final_coeffs * capacity_variable).sum())
 
-    m.remove_objective()
-    m.objective = sum(objective_expressions)
-
-    return m
+    model.remove_objective()
+    model.objective = sum(objective_expressions)
