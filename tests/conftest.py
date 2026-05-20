@@ -1,3 +1,5 @@
+import yaml
+
 import pandas as pd
 import pytest
 
@@ -46,3 +48,11 @@ class MockPypsaNetwork:
         if component == "Generator":
             return self.generators.index
         return pd.Index([])
+
+
+@pytest.fixture()
+def pypsa_spores_config():
+    """Fixture for a sample SPORES configuration."""
+    with open("configs/spores_configs/test_spores_configs/test_diversify.yaml") as f:
+        config = yaml.safe_load(f)
+    return config
