@@ -44,7 +44,8 @@ def test_create_modified_model(mock_pypsa_and_linopy_env):
     """Tests that the function correctly adds the budget constraint and calls other functions in the correct order."""
     mock_network, mock_model, mock_modify_objective = mock_pypsa_and_linopy_env
 
-    config = {"spores_slack": 0.1}
+    config = MagicMock(name="MockConfig")
+    config.spores_slack = 0.1
     optimal_cost = 1000.0
     weights = {"some": "weights"}
 
@@ -64,7 +65,7 @@ def test_create_modified_model(mock_pypsa_and_linopy_env):
 
     # Manually build the expected constraint expression
     expected_lhs = mock_model.objective
-    expected_rhs = (1 + config["spores_slack"]) * optimal_cost
+    expected_rhs = (1 + config.spores_slack) * optimal_cost
 
     # Linopy constraints have .lhs, .rhs, and .sign attributes
     assert_linequal(actual_constraint.lhs, expected_lhs)

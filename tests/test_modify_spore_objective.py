@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import linopy
 import pandas as pd
 from .conftest import MockPypsaNetwork
@@ -25,10 +27,9 @@ def test_modify_objective_diversify_only(asset_indices):
     """Tests the standard 'diversify' mode. The objective should only include the diversification term."""
     n, m = setup_model_and_network()
     weights = pd.Series([0.5, 1.0, 0.0], index=asset_indices)
-    config = {
-        "intensify": False,
-        "diversification_coefficient": 10,
-    }
+    config = MagicMock(name="MockConfig")
+    config.intensify = False
+    config.diversification_coefficient = 10
 
     m = modify_objective(n, m, weights, config)
 
@@ -52,12 +53,12 @@ def test_modify_objective_intensify_and_diversify(asset_indices):
     """Tests 'intensify and diversify' mode. The objective should include both terms."""
     n, m = setup_model_and_network()
     weights = pd.Series([0.5, 1.0, 0.2], index=asset_indices)
-    config = {
-        "intensify": True,
-        "diversification_coefficient": 10,
-        "intensification_coefficient": 100,
-        "intensifiable_technologies": ["gas"],
-    }
+    config = MagicMock(name="MockConfig")
+    config.intensify = True
+    config.diversification_coefficient = 10
+    config.intensification_coefficient = 100
+    config.intensifiable_technologies = ["gas"]
+
     m = modify_objective(n, m, weights, config)
     capacity_vars = m.variables["Generator-p_nom"]
     expected_coeffs = pd.Series(

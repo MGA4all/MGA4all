@@ -7,8 +7,9 @@ import pandas as pd
 import pypsa
 
 from .validate import (
-    validate_spores_configuration,
+    PYPSAConfig,
     PYPSA_DATAFRAME_NAMES,
+    SporesConfig,
     WeightingMethod,
 )
 
@@ -28,11 +29,10 @@ def run_spores(
     -------
     spore_networks: list[pypsa.Network]
     """
-    validate_spores_configuration(spores_config)
+    config = PYPSAConfig(**spores_config).SPORES
 
-    config_data = spores_config["SPORES"]
-    weighting_method = config_data.get("weighting_method")
-    asset_indices = get_asset_multi_index(config_data)
+    weighting_method = config.weighting_method
+    asset_indices = get_asset_multi_index(config)
     max_capacities = get_max_capacities(least_cost_network, asset_indices)
 
     # Check if the network is already optimized, else raise an error.
@@ -43,7 +43,7 @@ def run_spores(
 
     # First spore uses zeros or relative deployment as weights
     prev_weights = pd.Series(0.0, index=asset_indices, name="weights")
-    if not config_data["intensify"]:
+    if not config.intensify:
         relative_deployment = (
             get_deployment(least_cost_network, asset_indices) / max_capacities
         )
@@ -51,7 +51,7 @@ def run_spores(
             relative_deployment, prev_weights
         )
     first_spore = evaluate_weights(
-        least_cost_network, prev_weights, config_data, solver_options
+        least_cost_network, prev_weights, config, solver_options
     )
     spore_networks = [first_spore]
     deploy_his = pd.DataFrame(  # Record history for evolving_average/median methods
@@ -62,7 +62,7 @@ def run_spores(
     )
 
     # Run SPORES
-    for i in range(config_data["num_spores"] - 1):
+    for i in range(config.num_spores - 1):
         match weighting_method:
             case WeightingMethod.RANDOM:
                 new_weights = set_weights_random(asset_indices, upper_bound)
@@ -92,7 +92,7 @@ def run_spores(
 
         logger.debug(f"weights for iteration {i}: {new_weights}")
         new_spore = evaluate_weights(
-            least_cost_network, new_weights, config_data, solver_options
+            least_cost_network, new_weights, config, solver_options
         )
         spore_networks.append(new_spore)
 
@@ -105,7 +105,7 @@ def run_spores(
 def evaluate_weights(
     base_network: pypsa.Network,
     weights: pd.Series,
-    config_data: dict,
+    config_data: SporesConfig,
     solver_options: dict,
 ) -> pypsa.Network:
     """Evaluate a PyPSA network with objective modified according to given weights
@@ -126,12 +126,12 @@ def evaluate_weights(
     return new_spore
 
 
-def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
+def get_asset_multi_index(configuration: SporesConfig) -> pd.MultiIndex:
     """Unpack the spore technologies information into a flat datastructure."""
     entries = [
-        (asset_group["component"], asset_group["attribute"], asset)
-        for asset_group in configuration["spore_technologies"]
-        for asset in asset_group["assets"]
+        (asset_group.component, asset_group.attribute, asset)
+        for asset_group in configuration.spore_technologies
+        for asset in asset_group.assets
     ]
     return pd.MultiIndex.from_tuples(entries, names=["component", "attribute", "asset"])
 
@@ -237,7 +237,10 @@ def optimize_model_and_assign_solution_to_network(
 
 
 def create_modified_model(
-    n: pypsa.Network, configuration: dict, optimal_cost: float, weights: pd.Series
+    n: pypsa.Network,
+    configuration: SporesConfig,
+    optimal_cost: float,
+    weights: pd.Series,
 ) -> linopy.Model:
     """Create the modified model (with the new objective and budget constraint) from the least-cost network."""
     # 1. Access the underlying linopy model of the least-cost pypsa network
@@ -246,7 +249,7 @@ def create_modified_model(
     )  # suppress FutureWarning about objective constant
 
     # 2. Add the budget constraint to the model
-    slack = configuration["spores_slack"]
+    slack = configuration.spores_slack
     least_cost_objective = m.objective
     if not isinstance(least_cost_objective, linopy.LinearExpression):
         least_cost_objective = least_cost_objective.expression
@@ -260,38 +263,13 @@ def create_modified_model(
     return m
 
 
-def modified_model_for_spores_run(
-    n: pypsa.Network,
-    m: linopy.Model,
-    configuration: dict,
-    optimal_cost: float,
-    weights: pd.Series,
-) -> linopy.Model:
-    """Modify the model given model to add the new objective function and budget constraint."""
-    # 1. Add the budget constraint to the model
-    slack = configuration["spores_slack"]
-    least_cost_objective = m.objective
-    if not isinstance(least_cost_objective, linopy.LinearExpression):
-        least_cost_objective = least_cost_objective.expression
-    m.add_constraints(
-        least_cost_objective <= (1 + slack) * optimal_cost, name="budget-constraint"
-    )
-
-    # 2. Modify the objective function
-    m = modify_objective(n, m, weights, configuration)
-
-    return m
-
-
 def modify_objective(
-    n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: dict
+    n: pypsa.Network, m: linopy.Model, weights: pd.Series, configuration: SporesConfig
 ) -> linopy.Model:
     """Modify the objective function to optimize technology capacities instead of costs."""
-    diversification_coeff = float(configuration.get("diversification_coefficient"))
-    intensification_coeff = configuration.get("intensification_coefficient")
-    if intensification_coeff is not None:
-        intensification_coeff = float(intensification_coeff)
-    intensifiable_technologies = configuration.get("intensifiable_technologies")
+    diversification_coeff = configuration.diversification_coefficient
+    intensification_coeff = configuration.intensification_coefficient
+    intensifiable_technologies = configuration.intensifiable_technologies
 
     group_levels = ["component", "attribute"]
     objective_expressions = []
@@ -310,7 +288,7 @@ def modify_objective(
         # Build intensification terms, starting with zeros
         intensification_final_coeffs = pd.Series(0.0, index=tech_weights.index)
 
-        if configuration["intensify"] and intensification_coeff != 0:
+        if configuration.intensify and intensifiable_technologies:
             intensify_mask = tech_weights.index.isin(intensifiable_technologies)
             # Apply the value only to the selected technologies
             intensification_final_coeffs[intensify_mask] = intensification_coeff
