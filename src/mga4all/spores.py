@@ -22,7 +22,12 @@ def run_spores(
     solver_options: dict,
     upper_bound: int = 100,
 ) -> list[pypsa.Network]:
-    """Run the SPORES optimization to generate multiple near-optimal solutions."""
+    """Run the SPORES optimization to generate multiple near-optimal solutions.
+
+    Returns
+    -------
+    spore_networks: list[pypsa.Network]
+    """
     validate_spores_configuration(spores_config)
 
     config_data = spores_config["SPORES"]
@@ -30,80 +35,80 @@ def run_spores(
     asset_indices = get_asset_multi_index(config_data)
     max_capacities = get_max_capacities(least_cost_network, asset_indices)
 
-    # Get the least-cost optimal solution from the solved network.
     # Check if the network is already optimized, else raise an error.
     if not least_cost_network.is_solved:
         raise ValueError("The input network must be optimized before running SPORES.")
-    optimal_cost = (
-        least_cost_network.statistics.capex().sum()
-        + least_cost_network.statistics.opex().sum()
-    )
+    # PyPSA does not allow copying networks with a solver_model attached, so remove in case it is there.
+    least_cost_network.model.solver_model = None
 
-    # Initialize collectors to store results/history
-    spore_networks = []
-
-    # Deployment history is needed for `evolving_average` weighting methods. Initialize the history with the least-cost
-    # solution's deployment so that it has a memory of the original least-cost solution.
-    deploy_his = pd.DataFrame(
-        {"init": get_deployment(least_cost_network, asset_indices)}
-    )
-
-    # Clean up model state so we can make a copy and avoid rebuilding inside the spores loop. PyPSA does not allow
-    # copying networks with a solver_model attached, so we need to remove it first.
-    if least_cost_network and hasattr(least_cost_network.model, "solver_model"):
-        least_cost_network.model.solver_model = None
-
+    # First spore uses zeros or relative deployment as weights
     prev_weights = pd.Series(0.0, index=asset_indices, name="weights")
+    if not config_data["intensify"]:
+        relative_deployment = get_deployment(least_cost_network, asset_indices) / max_capacities
+        prev_weights = calculate_weights_relative_deployment(
+            relative_deployment, prev_weights
+        )
+    first_spore = evaluate_weights(least_cost_network, prev_weights, config_data, solver_options)
+    spore_networks = [first_spore]
+    deploy_his = pd.DataFrame(  # Record history for evolving_average/median methods
+        {0: get_deployment(first_spore, asset_indices)}
+    )
 
     # Run SPORES
-    for i in range(config_data["num_spores"]):
-        if i == 0:
-            if config_data["intensify"]:
-                new_weights = prev_weights
-            else:
-                relative_deployment = deploy_his["init"] / max_capacities
+    for i in range(1, config_data["num_spores"]):
+
+        match weighting_method:
+            case WeightingMethod.RANDOM:
+                new_weights = set_weights_random(asset_indices, upper_bound)
+            case (
+                WeightingMethod.RELATIVE_DEPLOYMENT
+                | WeightingMethod.RELATIVE_DEPLOYMENT_NORMALIZED
+            ):
+                rel_deployment = deploy_his[i - 1] / max_capacities
+                normalize = "normalized" in weighting_method
                 new_weights = calculate_weights_relative_deployment(
-                    relative_deployment, prev_weights
+                    rel_deployment, prev_weights, normalize=normalize
                 )
+            case WeightingMethod.EVOLVING_AVERAGE:
+                weights = deploy_his.mean(axis=1)
+                new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
+            case WeightingMethod.EVOLVING_MEDIAN:
+                weights = deploy_his.median(axis=1)
+                new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
+            case _:
+                raise RuntimeError(f"{weighting_method=} unknown")
 
-        else:
-            match weighting_method:
-                case WeightingMethod.RANDOM:
-                    new_weights = set_weights_random(asset_indices, upper_bound)
-                case (
-                    WeightingMethod.RELATIVE_DEPLOYMENT
-                    | WeightingMethod.RELATIVE_DEPLOYMENT_NORMALIZED
-                ):
-                    rel_deployment = deploy_his[i - 1] / max_capacities
-                    normalize = "normalized" in weighting_method
-                    new_weights = calculate_weights_relative_deployment(
-                        rel_deployment, prev_weights, normalize=normalize
-                    )
-                case WeightingMethod.EVOLVING_AVERAGE:
-                    weights = deploy_his.mean(axis=1)
-                    new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
-                case WeightingMethod.EVOLVING_MEDIAN:
-                    weights = deploy_his.median(axis=1)
-                    new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
-                case _:
-                    raise RuntimeError(f"{weighting_method=} unknown")
-
-        network = least_cost_network.copy()
-        # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
-        modified_model = create_modified_model(
-            network, config_data, optimal_cost, new_weights
-        )
-        new_spore, solved_model = optimize_model_and_assign_solution_to_network(
-            network, modified_model, solver_options
-        )
-
-        prev_weights = new_weights
+        new_spore = evaluate_weights(least_cost_network, new_weights, config_data, solver_options)
         spore_networks.append(new_spore)
 
-        # Needed for evolving_median and evolving_average weighting methods
+        prev_weights = new_weights
         deploy_his[i] = get_deployment(new_spore, asset_indices)
 
     return spore_networks
+
+
+def evaluate_weights(
+    base_network: pypsa.Network, weights: pd.Series, config_data: dict, solver_options: dict
+) -> pypsa.Network:
+    """Evaluate a PyPSA network with objective modified according to given weights
+
+    Returns
+    -------
+    new_spore: PyPSA.Network
+    """
+    optimal_cost = (
+        base_network.statistics.capex().sum()
+        + base_network.statistics.opex().sum()
+    )
+    network = base_network.copy()
+    # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
+    modified_model = create_modified_model(
+        network, config_data, optimal_cost, weights
+    )
+    new_spore, solved_model = optimize_model_and_assign_solution_to_network(
+        network, modified_model, solver_options
+    )
+    return new_spore
 
 
 def get_asset_multi_index(configuration: dict) -> pd.MultiIndex:
