@@ -44,19 +44,22 @@ def run_spores(
     # First spore uses zeros or relative deployment as weights
     prev_weights = pd.Series(0.0, index=asset_indices, name="weights")
     if not config_data["intensify"]:
-        relative_deployment = get_deployment(least_cost_network, asset_indices) / max_capacities
+        relative_deployment = (
+            get_deployment(least_cost_network, asset_indices) / max_capacities
+        )
         prev_weights = calculate_weights_relative_deployment(
             relative_deployment, prev_weights
         )
-    first_spore = evaluate_weights(least_cost_network, prev_weights, config_data, solver_options)
+    first_spore = evaluate_weights(
+        least_cost_network, prev_weights, config_data, solver_options
+    )
     spore_networks = [first_spore]
     deploy_his = pd.DataFrame(  # Record history for evolving_average/median methods
-        {0: get_deployment(first_spore, asset_indices)}
+        {"initial": get_deployment(first_spore, asset_indices)}
     )
 
     # Run SPORES
-    for i in range(1, config_data["num_spores"]):
-
+    for i in range(config_data["num_spores"] - 1):
         match weighting_method:
             case WeightingMethod.RANDOM:
                 new_weights = set_weights_random(asset_indices, upper_bound)
@@ -64,31 +67,42 @@ def run_spores(
                 WeightingMethod.RELATIVE_DEPLOYMENT
                 | WeightingMethod.RELATIVE_DEPLOYMENT_NORMALIZED
             ):
-                rel_deployment = deploy_his[i - 1] / max_capacities
-                normalize = "normalized" in weighting_method
+                rel_deployment = deploy_his.iloc[:, -1] / max_capacities
+                normalize = (
+                    weighting_method == WeightingMethod.RELATIVE_DEPLOYMENT_NORMALIZED
+                )
                 new_weights = calculate_weights_relative_deployment(
                     rel_deployment, prev_weights, normalize=normalize
                 )
             case WeightingMethod.EVOLVING_AVERAGE:
                 weights = deploy_his.mean(axis=1)
-                new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
+                new_weights = calculate_weights_evolving(
+                    deploy_his.iloc[:, -1], weights
+                )
             case WeightingMethod.EVOLVING_MEDIAN:
                 weights = deploy_his.median(axis=1)
-                new_weights = calculate_weights_evolving(deploy_his[i - 1], weights)
+                new_weights = calculate_weights_evolving(
+                    deploy_his.iloc[:, -1], weights
+                )
             case _:
                 raise RuntimeError(f"{weighting_method=} unknown")
 
-        new_spore = evaluate_weights(least_cost_network, new_weights, config_data, solver_options)
+        new_spore = evaluate_weights(
+            least_cost_network, new_weights, config_data, solver_options
+        )
         spore_networks.append(new_spore)
 
         prev_weights = new_weights
-        deploy_his[i] = get_deployment(new_spore, asset_indices)
+        deploy_his[i] = get_deployment(new_spore, asset_indices)  # append column
 
     return spore_networks
 
 
 def evaluate_weights(
-    base_network: pypsa.Network, weights: pd.Series, config_data: dict, solver_options: dict
+    base_network: pypsa.Network,
+    weights: pd.Series,
+    config_data: dict,
+    solver_options: dict,
 ) -> pypsa.Network:
     """Evaluate a PyPSA network with objective modified according to given weights
 
@@ -97,14 +111,11 @@ def evaluate_weights(
     new_spore: PyPSA.Network
     """
     optimal_cost = (
-        base_network.statistics.capex().sum()
-        + base_network.statistics.opex().sum()
+        base_network.statistics.capex().sum() + base_network.statistics.opex().sum()
     )
     network = base_network.copy()
     # Create & optimize the modified model (has the new objective (tech capacities * weights) & budget constraints)
-    modified_model = create_modified_model(
-        network, config_data, optimal_cost, weights
-    )
+    modified_model = create_modified_model(network, config_data, optimal_cost, weights)
     new_spore, solved_model = optimize_model_and_assign_solution_to_network(
         network, modified_model, solver_options
     )
@@ -192,7 +203,7 @@ def calculate_weights_evolving(
 
     new_weights = 1 / relative_change
     # If the deployment of an asset is 0, we want to encourage the deployment of this technology.
-    new_weights[average_deployment == 0] = 0.0
+    new_weights[average_deployment < clip_min] = 0.0
     return new_weights
 
 
