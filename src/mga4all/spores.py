@@ -55,7 +55,10 @@ def run_spores(
     )
     spore_networks = [first_spore]
     deploy_his = pd.DataFrame(  # Record history for evolving_average/median methods
-        {"initial": get_deployment(first_spore, asset_indices)}
+        {
+            "least_cost": get_deployment(least_cost_network, asset_indices),
+            "first_spore": get_deployment(first_spore, asset_indices),
+        }
     )
 
     # Run SPORES
@@ -87,6 +90,7 @@ def run_spores(
             case _:
                 raise RuntimeError(f"{weighting_method=} unknown")
 
+        logger.debug(f"weights for iteration {i}: {new_weights}")
         new_spore = evaluate_weights(
             least_cost_network, new_weights, config_data, solver_options
         )
