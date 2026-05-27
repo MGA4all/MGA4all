@@ -11,12 +11,14 @@ from pydantic import (
     model_validator,
 )
 
+
 class WeightingMethod(StrEnum):
     RANDOM = auto()
     EVOLVING_MEDIAN = auto()
     EVOLVING_AVERAGE = auto()
     RELATIVE_DEPLOYMENT = auto()
     RELATIVE_DEPLOYMENT_NORMALIZED = auto()
+
 
 class PyPSAComponent(StrEnum):
     GENERATOR = "Generator"
@@ -25,6 +27,7 @@ class PyPSAComponent(StrEnum):
     LINK = "Link"
     STORE = "Store"
     STORAGEUNIT = "StorageUnit"
+
 
 PYPSA_DATAFRAME_NAMES: dict[PyPSAComponent, str] = dict(
     zip(
@@ -101,7 +104,7 @@ class SporesConfig(BaseModel):
             for asset_group in self.spore_technologies
             for asset in asset_group.assets
         }
-        
+
         difference = set(self.intensifiable_technologies) - spores_asset_names
         if len(difference) != 0:
             raise ValueError(
