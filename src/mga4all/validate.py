@@ -132,8 +132,3 @@ class SporesConfig(BaseModel):
 
 class PYPSAConfig(BaseModel):
     SPORES: SporesConfig
-
-
-def validate_spores_configuration(config: dict):
-    """Validate a SPORES YAML config against the specified requirements."""
-    PYPSAConfig.model_validate(config)
