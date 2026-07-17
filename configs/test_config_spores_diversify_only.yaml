@@ -1,0 +1,11 @@
+# yaml configuration file for running SPORES algorithm
+
+config_name: "spores"
+model_interface: pypsa
+cost_slack: 0.1
+alternatives: 5
+spatially_explicit: True 
+diversification_coefficient: "auto"
+intensification_coefficient: 0 # Can be -1 for positive intensification, 1 for negative intensification, 0 for no intensification, or a list of those for per-technology intensification direction
+diversified_technologies: ["wind", "solar", "gas", "battery"]
+intensified_technologies: []

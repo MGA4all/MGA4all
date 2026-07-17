@@ -7,7 +7,6 @@ from .model_interface_pypsa import (
     extract_minimum_feasible_cost,
     create_mga_model,
     add_slack_constraint,
-    convert_linear_weights_into_pypsa,
     assign_mga_objective
 )
 
@@ -31,7 +30,7 @@ def create_target_variables(test_config, n_mga):
     spatial = test_config['spatially_explicit']
     target_techs = match_config_techs_to_model_techs(test_config,n_mga)
 
-    deployed_capacity = extract_deployed_capacity(target_techs, n_mga, spatial)
+    deployed_capacity = extract_diversified_capacity(target_techs, n_mga, spatial)
     deployed_capacity_series = pd.Series({
         k: v
         for inner in deployed_capacity.values()
@@ -71,7 +70,7 @@ def random_directions_algorithm(test_config, n_costopt):
         ## TODO: make the result saving and inspection smoother and
         ## standardised across methods
         
-        mga_alternatives[j] = extract_deployed_capacity(target_techs, n_mga, spatial=False)
-        mga_spatial_alternatives[j] = extract_deployed_capacity(target_techs, n_mga, spatial=True)
+        mga_alternatives[j] = extract_diversified_capacity(target_techs, n_mga, spatial=False)
+        mga_spatial_alternatives[j] = extract_diversified_capacity(target_techs, n_mga, spatial=True)
 
     return mga_alternatives, mga_spatial_alternatives
