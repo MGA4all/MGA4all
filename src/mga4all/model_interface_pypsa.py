@@ -67,8 +67,14 @@ def extract_deployed_capacity(target_techs, n, spatial=False):
         deployed_capacity = deployed_capacity_assets
     else:
         deployed_capacity = deployed_capacity_buses
+
+    deployed_capacity_series = pd.Series({
+        k: v
+        for inner in deployed_capacity.values()
+        for k, v in inner.items()
+    })
     
-    return deployed_capacity
+    return deployed_capacity_series
 
 
 def extract_minimum_feasible_cost(n):
