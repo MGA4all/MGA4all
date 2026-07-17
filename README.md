@@ -6,7 +6,8 @@ Various Modelling to Generate Alternative schemes for different energy system op
 | Algorithm                                             | PyPSA + linopy |
 |-------------------------------------------------------|----------------|
 | [SPORES](https://doi.org/10.1016/j.joule.2020.08.002) | ✅             |
-| [Random Directions][]                                 | ✅             |   
+| [Random Directions][]                                 | ✅             |
+| [Hop-Skip-JUmp][]                                     | ✅             |   
 
 ## Running MGA4all
 
