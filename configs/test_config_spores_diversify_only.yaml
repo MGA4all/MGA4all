@@ -2,7 +2,7 @@
 
 config_name: "spores"
 model_interface: pypsa
-cost_slack: 0.1
+cost_slack: 0.2
 alternatives: 5
 spatially_explicit: True 
 diversification_coefficient: "auto"

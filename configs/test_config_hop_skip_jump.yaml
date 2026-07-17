@@ -2,7 +2,7 @@
 
 config_name: "hop-skip-jump"
 model_interface: pypsa
-cost_slack: 0.1
+cost_slack: 0.2
 alternatives: 5
 spatially_explicit: False
 diversified_technologies: ["wind", "solar", "gas", "battery"]
