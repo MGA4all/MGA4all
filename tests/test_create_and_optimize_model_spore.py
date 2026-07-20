@@ -49,7 +49,7 @@ def test_create_modified_model(mock_pypsa_and_linopy_env):
     optimal_cost = 1000.0
     weights = {"some": "weights"}
 
-    model = create_modified_model(mock_network, config, optimal_cost, weights)
+    create_modified_model(mock_network, config, optimal_cost, weights)
 
     # 1. Check that the model was created inside the function
     mock_network.optimize.create_model.assert_called_once()
@@ -73,30 +73,19 @@ def test_create_modified_model(mock_pypsa_and_linopy_env):
     assert actual_constraint.sign == "<="
 
     # 3. Check that modify_objective was called with the correct arguments
-    mock_modify_objective.assert_called_once_with(
-        mock_network, mock_model, weights, config
-    )
-
-    # 4. Check that the function returns the correct objects
-    assert model is mock_model
+    mock_modify_objective.assert_called_once_with(mock_model, weights, config)
 
 
 def test_optimize_model_and_assign_solution_to_network(mock_pypsa_and_linopy_env):
     """Tests that the function correctly calls the solve method and assigns the solution back to the network."""
     mock_network, mock_model, _ = mock_pypsa_and_linopy_env
 
-    returned_network, returned_model = optimize_model_and_assign_solution_to_network(
-        mock_network, mock_model, {"highs": {}}
-    )
+    optimize_model_and_assign_solution_to_network(mock_network, {"highs": {}})
 
     # Check that the model's solve method was called exactly once with the correct solver name.
-    mock_model.solve.assert_called_once_with(solver_name="highs")
+    mock_network.model.solve.assert_called_once_with(solver_name="highs")
 
     # 2. Check that the network's solution assignment methods were called.
     # We access these through the mock_network's .optimize attribute, which is also a mock.
     mock_network.optimize.assign_solution.assert_called_once()
     mock_network.optimize.assign_duals.assert_called_once()
-
-    # 3. Check that the function returns the same objects that were passed into it.
-    assert returned_network is mock_network
-    assert returned_model is mock_model

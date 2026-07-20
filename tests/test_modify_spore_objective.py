@@ -25,33 +25,33 @@ def setup_model_and_network():
 
 def test_modify_objective_diversify_only(asset_indices):
     """Tests the standard 'diversify' mode. The objective should only include the diversification term."""
-    n, m = setup_model_and_network()
+    network, model = setup_model_and_network()
     weights = pd.Series([0.5, 1.0, 0.0], index=asset_indices)
     config = MagicMock(name="MockConfig")
     config.intensify = False
     config.diversification_coefficient = 10
 
-    m = modify_objective(n, m, weights, config)
+    modify_objective(model, weights, config)
 
     # Manually build the expected linear expression
     # sense=1, coeff=10. solar: 1*10*0.5=5. wind: 1*10*1.0=10. gas: 1*10*0=0.
-    capacity_vars = m.variables["Generator-p_nom"]
+    capacity_vars = model.variables["Generator-p_nom"]
 
     # 1. Create a pandas Series for the final expected coefficients.
     expected_coeffs = pd.Series(
         {"solar": 5.0, "wind": 10.0, "gas": 0.0},
-        index=n.generators.index,  # Ensure the index matches the variable's index
+        index=network.generators.index,  # Ensure the index matches the variable's index
     )
 
     # 2. Multiply the coefficients by the variable and sum the result.
     expected_expr = (expected_coeffs * capacity_vars).sum()
 
-    assert_linequal(m.objective.expression, expected_expr)
+    assert_linequal(model.objective.expression, expected_expr)
 
 
 def test_modify_objective_intensify_and_diversify(asset_indices):
     """Tests 'intensify and diversify' mode. The objective should include both terms."""
-    n, m = setup_model_and_network()
+    network, model = setup_model_and_network()
     weights = pd.Series([0.5, 1.0, 0.2], index=asset_indices)
     config = MagicMock(name="MockConfig")
     config.intensify = True
@@ -59,10 +59,10 @@ def test_modify_objective_intensify_and_diversify(asset_indices):
     config.intensification_coefficient = 100
     config.intensifiable_technologies = ["gas"]
 
-    m = modify_objective(n, m, weights, config)
-    capacity_vars = m.variables["Generator-p_nom"]
+    modify_objective(model, weights, config)
+    capacity_vars = model.variables["Generator-p_nom"]
     expected_coeffs = pd.Series(
-        {"solar": 5.0, "wind": 10.0, "gas": 102.0}, index=n.generators.index
+        {"solar": 5.0, "wind": 10.0, "gas": 102.0}, index=network.generators.index
     )
     expected_expr = (expected_coeffs * capacity_vars).sum()
-    assert_linequal(m.objective.expression, expected_expr)
+    assert_linequal(model.objective.expression, expected_expr)
