@@ -231,7 +231,10 @@ def optimize_model_and_assign_solution_to_network(
 
 
 def create_modified_model(
-    network: pypsa.Network, configuration: SporesConfig, optimal_cost: float, weights: pd.Series
+    network: pypsa.Network,
+    configuration: SporesConfig,
+    optimal_cost: float,
+    weights: pd.Series,
 ) -> None:
     """Create the modified model (with the new objective and budget constraint) from the least-cost network."""
     # 1. Access the underlying linopy model of the least-cost pypsa network
@@ -276,8 +279,8 @@ def modify_objective(
             intensification_final_coeffs[intensify_mask] = intensification_coeff
 
         combined_final_coeffs = (
-            (diversification_coeff * tech_weights) + intensification_final_coeffs
-        )
+            diversification_coeff * tech_weights
+        ) + intensification_final_coeffs
 
         # 4. Create a single, clean LinearExpression
         capacity_variable = model[f"{component}-{attribute}"]
