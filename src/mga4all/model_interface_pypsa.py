@@ -1,8 +1,5 @@
-import pypsa
 import pandas as pd
 from copy import deepcopy
-
-#---- PyPSA model interface ----#
 
 PYPSA_CAPACITY_VARIABLES = {
     "Generator": "p_nom",
@@ -10,48 +7,69 @@ PYPSA_CAPACITY_VARIABLES = {
     "Process": "p_nom",
     "StorageUnit": "p_nom",
     "Store": "e_nom",
-    "Line": "s_nom"
+    "Line": "s_nom",
 }
 
 
-# Match technologies targeted by the config to the corresponding PyPSA components
-def match_config_techs_to_model_techs(config, n):
-    
+def match_config_techs_to_model_techs(config, network):
     diversified_techs = set(config["diversified_technologies"])
 
-    if config["intensified_technologies"] and (len(config["intensified_technologies"]) != 0):
+    if config["intensified_technologies"] and (
+        len(config["intensified_technologies"]) != 0
+    ):
         intensified_techs = set(config["intensified_technologies"])
         config_techs = intensified_techs | diversified_techs
     else:
         intensified_techs = None
         config_techs = diversified_techs
-        
+
     diversified_model_techs = {}
     intensified_model_techs = {}
-    
-    for comp in n.components:
-        df = comp.static
+
+    for component in network.components:
+        df = component.static
 
         if "carrier" not in df.columns:
             continue
 
         carriers_present = set(df["carrier"].dropna().astype(str))
-        matched_diversified = sorted(t for t in diversified_techs if t in carriers_present)
+        matched_diversified = sorted(
+            t for t in diversified_techs if t in carriers_present
+        )
         if matched_diversified:
-                diversified_model_techs[comp.name] = matched_diversified
+            diversified_model_techs[component.name] = matched_diversified
 
         if intensified_techs is not None:
-            matched_intensified = sorted(t for t in intensified_techs if t in carriers_present)
+            matched_intensified = sorted(
+                t for t in intensified_techs if t in carriers_present
+            )
             if matched_intensified:
-                intensified_model_techs[comp.name] = matched_intensified
-    try:
-        flat_intensified = [item for sublist in list(intensified_model_techs.values()) for item in sublist]
-        flat_diversified = [item for sublist in list(diversified_model_techs.values()) for item in sublist]
-        flat = flat_diversified + flat_intensified
-    except:
-        flat = [item for sublist in list(diversified_model_techs.values()) for item in sublist]
+                intensified_model_techs[component.name] = matched_intensified
 
-    print("Technologies {} not found in the model".format(sorted(list(config_techs - set(flat)))))
+    try:
+        flat_intensified = [
+            item
+            for sublist in list(intensified_model_techs.values())
+            for item in sublist
+        ]
+        flat_diversified = [
+            item
+            for sublist in list(diversified_model_techs.values())
+            for item in sublist
+        ]
+        flat = flat_diversified + flat_intensified
+    except Exception:
+        flat = [
+            item
+            for sublist in list(diversified_model_techs.values())
+            for item in sublist
+        ]
+
+    print(
+        "Technologies {} not found in the model".format(
+            sorted(list(config_techs - set(flat)))
+        )
+    )
 
     if intensified_techs is not None:
         model_techs = {}
@@ -62,65 +80,57 @@ def match_config_techs_to_model_techs(config, n):
 
     return model_techs
 
-def extract_diversified_capacity(target_techs, n, spatial=False):
 
+def extract_diversified_capacity(target_techs, network, spatial=False):
     component_tables = {
-        "Generator": (n.generators, "p_nom_opt", "carrier", "bus"),
-        "Link": (n.links, "p_nom_opt", "carrier", "bus0"),
-        "Process": (n.processes, "p_nom_opt", "carrier", "bus0"),
-        "StorageUnit": (n.storage_units, "p_nom_opt", "carrier", "bus"),
-        "Store": (n.stores, "e_nom_opt", "carrier", "bus"),
-        "Line": (n.lines, "s_nom_opt", "carrier", "bus0"),
+        "Generator": (network.generators, "p_nom_opt", "carrier", "bus"),
+        "Link": (network.links, "p_nom_opt", "carrier", "bus0"),
+        "Process": (network.processes, "p_nom_opt", "carrier", "bus0"),
+        "StorageUnit": (network.storage_units, "p_nom_opt", "carrier", "bus"),
+        "Store": (network.stores, "e_nom_opt", "carrier", "bus"),
+        "Line": (network.lines, "s_nom_opt", "carrier", "bus0"),
     }
 
     if "intensified" in target_techs.keys():
-        target_techs = target_techs["diversified"] # focus on diversity here
-    else:
-        pass
-    
+        target_techs = target_techs["diversified"]  # focus on diversity here
+
     deployed_capacity_assets = {}
     deployed_capacity_buses = {}
-        
+
     for component, carriers in target_techs.items():
         df, opt_col, carrier_col, bus_col = component_tables[component]
-    
+
         filtered = df[df[carrier_col].isin(carriers)]
-    
+
         deployed_capacity_assets[component] = filtered[opt_col].to_dict()
-    
+
         deployed_capacity_buses[component] = (
-            filtered.groupby(carrier_col)[opt_col]
-            .sum()
-            .to_dict()
+            filtered.groupby(carrier_col)[opt_col].sum().to_dict()
         )
 
-    if spatial==True:
+    if spatial is True:
         deployed_capacity = deployed_capacity_assets
     else:
         deployed_capacity = deployed_capacity_buses
 
-    deployed_capacity_series = pd.Series({
-        k: v
-        for inner in deployed_capacity.values()
-        for k, v in inner.items()
-    })
-    
+    deployed_capacity_series = pd.Series(
+        {k: v for inner in deployed_capacity.values() for k, v in inner.items()}
+    )
+
     return deployed_capacity_series
 
-def extract_intensified_capacity(target_techs, test_config, n, spatial=False):
 
+def extract_intensified_capacity(target_techs, test_config, network, spatial=False):
     component_tables = {
-        "Generator": (n.generators, "p_nom_opt", "carrier", "bus"),
-        "Link": (n.links, "p_nom_opt", "carrier", "bus0"),
-        "Process": (n.processes, "p_nom_opt", "carrier", "bus0"),
-        "StorageUnit": (n.storage_units, "p_nom_opt", "carrier", "bus"),
-        "Store": (n.stores, "e_nom_opt", "carrier", "bus"),
-        "Line": (n.lines, "s_nom_opt", "carrier", "bus0"),
+        "Generator": (network.generators, "p_nom_opt", "carrier", "bus"),
+        "Link": (network.links, "p_nom_opt", "carrier", "bus0"),
+        "Process": (network.processes, "p_nom_opt", "carrier", "bus0"),
+        "StorageUnit": (network.storage_units, "p_nom_opt", "carrier", "bus"),
+        "Store": (network.stores, "e_nom_opt", "carrier", "bus"),
+        "Line": (network.lines, "s_nom_opt", "carrier", "bus0"),
     }
 
-
     if "intensified" in target_techs.keys() and (len(target_techs["intensified"]) != 0):
-        
         mapping = {
             k: v
             for k, v in zip(
@@ -129,7 +139,7 @@ def extract_intensified_capacity(target_techs, test_config, n, spatial=False):
             )
         }
 
-        target_techs = target_techs["intensified"] # focus on intensity here
+        target_techs = target_techs["intensified"]  # focus on intensity here
 
         deployed_capacity_assets = {}
         deployed_capacity_buses = {}
@@ -147,84 +157,84 @@ def extract_intensified_capacity(target_techs, test_config, n, spatial=False):
 
             # spatial=False: carrier -> coefficient
             deployed_capacity_buses[component] = {
-                carrier: mapping[carrier]
-                for carrier in filtered[carrier_col].unique()
+                carrier: mapping[carrier] for carrier in filtered[carrier_col].unique()
             }
-            
+
         if spatial:
             deployed_capacity = deployed_capacity_assets
         else:
             deployed_capacity = deployed_capacity_buses
 
-        deployed_capacity_series = pd.Series({
-            k: v
-            for inner in deployed_capacity.values()
-            for k, v in inner.items()
-        })
-    
+        deployed_capacity_series = pd.Series(
+            {k: v for inner in deployed_capacity.values() for k, v in inner.items()}
+        )
+
     else:
         deployed_capacity_series = 0
-    
+
     return deployed_capacity_series
 
 
-
-def extract_minimum_feasible_cost(n):
-
-    optimal_cost = n.statistics.capex().sum() + n.statistics.opex().sum()
-    fixed_cost = n.statistics.installed_capex().sum()
+def extract_minimum_feasible_cost(network):
+    optimal_cost = network.statistics.capex().sum() + network.statistics.opex().sum()
+    fixed_cost = network.statistics.installed_capex().sum()
 
     true_optimal_cost = optimal_cost - fixed_cost
 
     return true_optimal_cost
 
-def create_mga_model(n):
 
-    n.model.solver_model = None
-    n_mga = n.copy() # Network object
-    
-    m_mga = n_mga.optimize.create_model(include_objective_constant=False) # Model object
+def create_mga_model(network):
+    network.model.solver_model = None
+    network_mga = network.copy()  # Network object
 
-    return (n_mga, m_mga)
+    model_mga = network_mga.optimize.create_model(
+        include_objective_constant=False
+    )  # Model object
 
-def add_slack_constraint(m_mga, true_optimal_cost, slack):
-    
-    original_objective = m_mga.objective
+    return (network_mga, model_mga)
+
+
+def add_slack_constraint(model_mga, true_optimal_cost, slack):
+    original_objective = model_mga.objective
     cost_expr = (
         original_objective
         if not hasattr(original_objective, "expression")
         else original_objective.expression
     )
-    
-    m_mga.add_constraints(
+
+    model_mga.add_constraints(
         cost_expr <= (1 + slack) * (true_optimal_cost),
         name="budget",
     )
 
     return
 
-def convert_linear_weights_into_pypsa(n, mga_weights_series, target_techs, spatial=False):
 
+def convert_linear_weights_into_pypsa(
+    network, mga_weights_series, target_techs, spatial=False
+):
     pypsa_component_tables = {
-        "Generator": n.generators,
-        "Link": n.links,
-        "Process": n.processes,
-        "StorageUnit": n.storage_units,
-        "Store": n.stores,
-        "Line": n.lines,
+        "Generator": network.generators,
+        "Link": network.links,
+        "Process": network.processes,
+        "StorageUnit": network.storage_units,
+        "Store": network.stores,
+        "Line": network.lines,
     }
-        
-    s = mga_weights_series
+
+    weights = mga_weights_series
     pypsa_weights = {}
 
-    if "intensified" in target_techs.keys():    
+    if "intensified" in target_techs.keys():
         merged_target_techs = deepcopy(target_techs["diversified"])
 
         for component, carriers in target_techs["intensified"].items():
             if component in merged_target_techs:
                 # Add only carriers that are not already present
                 merged_target_techs[component].extend(
-                    carrier for carrier in carriers
+                    carrier
+                    for carrier in carriers
                     if carrier not in merged_target_techs[component]
                 )
             else:
@@ -236,17 +246,17 @@ def convert_linear_weights_into_pypsa(n, mga_weights_series, target_techs, spati
         var = PYPSA_CAPACITY_VARIABLES[component]
         df = pypsa_component_tables[component]
 
-        if spatial==True:
+        if spatial is True:
             names = df.index[df["carrier"].isin(techs)]
-            coeffs = s.loc[names]
+            coeffs = weights.loc[names]
 
-        elif spatial == False:
+        elif spatial is False:
             coeffs = {}
             for tech in techs:
-                if tech not in s.index:
+                if tech not in weights.index:
                     continue
                 names = df.index[df["carrier"] == tech]
-                coeffs.update({name: s.loc[tech] for name in names})
+                coeffs.update({name: weights.loc[tech] for name in names})
             coeffs = pd.Series(coeffs)
 
         else:
@@ -256,17 +266,19 @@ def convert_linear_weights_into_pypsa(n, mga_weights_series, target_techs, spati
 
     return pypsa_weights
 
-def assign_mga_objective(n_mga, m_mga, mga_weights_series, target_techs, spatial=False):
 
-    weight_dict = convert_linear_weights_into_pypsa(n_mga, mga_weights_series, target_techs, spatial)
-    
-    mga_obj = n_mga.optimize.build_linexpr_from_weights(
-        weight_dict,
-        model=m_mga,
+def assign_mga_objective(
+    network_mga, model_mga, mga_weights_series, target_techs, spatial=False
+):
+    weight_dict = convert_linear_weights_into_pypsa(
+        network_mga, mga_weights_series, target_techs, spatial
     )
 
-    m_mga.add_objective(mga_obj, overwrite=True)
+    mga_obj = network_mga.optimize.build_linexpr_from_weights(
+        weight_dict,
+        model=model_mga,
+    )
+
+    model_mga.add_objective(mga_obj, overwrite=True)
 
     return
-    
-#--------------------------------#
