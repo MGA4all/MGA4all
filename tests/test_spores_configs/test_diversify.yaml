@@ -5,7 +5,7 @@ SPORES:
   num_spores: 5
   weighting_method: "relative_deployment"
   intensify: false
-  diversification_coefficient: 1  # Must be a positive number.
+  diversification_coefficient: 1 # Must be a positive number.
   spore_technologies: # Target technologies when running SPORES.
     - component: Generator
       attribute: p_nom
@@ -24,4 +24,3 @@ SPORES:
       attribute: s_nom
       assets:
         - line
-
