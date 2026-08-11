@@ -45,7 +45,7 @@ from mga4all.spores import run_spores
 from mga4all.examples import create_pypsa_network
 
 solver_options = {"highs": {}}
-with open("configs/spores_configs/test_spores_configs/test_diversify.yaml") as yf:
+with open("tests/test_spores_configs/test_diversify.yaml") as yf:
     test_config = yaml.safe_load(yf)
 
 mynetwork = create_pypsa_network()
