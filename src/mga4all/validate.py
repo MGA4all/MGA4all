@@ -1,5 +1,6 @@
-from enum import StrEnum, auto
-from typing import Annotated
+from copy import copy
+from enum import StrEnum
+from typing import Annotated, Literal
 from typing_extensions import Self
 
 from pydantic import (
@@ -12,14 +13,6 @@ from pydantic import (
 )
 
 
-class WeightingMethod(StrEnum):
-    RANDOM = auto()
-    EVOLVING_MEDIAN = auto()
-    EVOLVING_AVERAGE = auto()
-    RELATIVE_DEPLOYMENT = auto()
-    RELATIVE_DEPLOYMENT_NORMALIZED = auto()
-
-
 class PyPSAComponent(StrEnum):
     GENERATOR = "Generator"
     LINE = "Line"
@@ -27,12 +20,21 @@ class PyPSAComponent(StrEnum):
     LINK = "Link"
     STORE = "Store"
     STORAGEUNIT = "StorageUnit"
+    PROCESS = "Process"
 
 
 PYPSA_DATAFRAME_NAMES: dict[PyPSAComponent, str] = dict(
     zip(
         PyPSAComponent,
-        ["generators", "lines", "transformers", "links", "stores", "storage_units"],
+        [
+            "generators",
+            "lines",
+            "transformers",
+            "links",
+            "stores",
+            "storage_units",
+            "processes",
+        ],
     )
 )
 
@@ -46,89 +48,49 @@ class AssetGroup(BaseModel):
     """Asset names of this component type to be targeted."""
 
 
-class SporesConfig(BaseModel):
+class SimpleMGAConfig(BaseModel):
     config_name: Annotated[str, StringConstraints(min_length=1)]
     """Descriptive name of this configuration, used in the output folder name to save results."""
+    model_interface: Literal["pypsa"]
+    """Which model interface to use (e.g., PyPSA's)."""
 
-    num_spores: PositiveInt
-    """Number of SPORES to generate."""
-    spores_slack: Annotated[float, Field(gt=0, lt=1)]
-    """..."""
-    diversification_coefficient: PositiveFloat
-    """Diversification coefficient, must be positive. ..."""
+    alternatives: PositiveInt
+    """Number of MGA alternatives to generate."""
+    cost_slack: Annotated[float, Field(gt=0, lt=1)]
+    """Percentage relaxation of the optimal cost expressed as a fraction (e.g., 10% is 0.1)"""
+    spatially_explicit: bool
+    """Whether to target MGA variables per node or at the system level only."""
+    diversification_coefficient: Literal["auto"] | PositiveFloat
+    """Diversification coefficient, must be "auto" or positive."""
 
-    weighting_method: WeightingMethod
-    """Which method should be used to update weights after each iteration."""
-    intensify: bool
-    """Toggle if SPORES should include an intensification step."""
 
-    spore_technologies: list[AssetGroup] = Field(min_length=1)
-    """Which technologies to target during the SPORES run."""
+class HopSkipJump(SimpleMGAConfig):
+    pass
 
-    # Conditionally optional values
-    intensification_coefficient: float | None = None
-    """Intensification coefficient. Positive for minimization, negative for maximization. ..."""
-    intensifiable_technologies: list[str] | None = None
-    """Subset of `spore_technologies` to intensify, i.e., push to max or min deployment within slack."""
 
-    @model_validator(mode="after")
-    def check_intensification_options(self) -> Self:
-        """Check that intensification options are present when that mode is selected."""
-        lacks_coefficient = self.intensification_coefficient is None
-        lacks_intensifiable = (
-            self.intensifiable_technologies is None
-            or len(self.intensifiable_technologies) == 0
-        )
+class RandomDirections(SimpleMGAConfig):
+    pass
 
-        if self.intensify and (lacks_coefficient or lacks_intensifiable):
-            raise ValueError(
-                "`intensification_coefficient` and `intensifiable_technologies` "
-                "must be both provided when `intensify` is `True`."
-            )
-        elif lacks_coefficient is not lacks_intensifiable:  # XOR
-            raise ValueError(
-                "`intensification_coefficient` and `intensifiable_technologies` "
-                "must be both provided or omitted together."
-            )
 
-        return self
+class SPORESConfig(SimpleMGAConfig):
+    intensification_coefficient: Literal[-1, 0, 1] | list[Literal[-1, 0, 1]]
+    """Intensification coefficient, must be 0, 1, -1, or a list of those."""
 
-    @model_validator(mode="after")
-    def check_intensifiable_subset(self) -> Self:
-        """Check that the list of intensifiable technologies is a subset of the `spores_technologies`."""
-        if self.intensifiable_technologies is None:
-            return self  # skip if not defined
-
-        spores_asset_names = {
-            asset
-            for asset_group in self.spore_technologies
-            for asset in asset_group.assets
-        }
-
-        difference = set(self.intensifiable_technologies) - spores_asset_names
-        if len(difference) != 0:
-            raise ValueError(
-                "The following assets listed under `intensifiable_technologies` were not "
-                "previously defined under `spores_technologies`:\n"
-                + "\n".join(difference)
-            )
-
-        return self
+    diversified_technologies: list[str] = Field(min_length=0)
+    """Which technologies to diversify during the MGA run."""
+    intensified_technologies: list[str] = Field(min_length=0)
+    """Which technologies to intensify during the MGA run."""
 
     @model_validator(mode="after")
     def check_for_duplicates(self) -> Self:
-        """Extra check: No duplicate component-index pairs in spore_technologies."""
-        seen_pairs = set()
-        for asset_group in self.spore_technologies:
-            component = asset_group.component
-            for asset in asset_group.assets:
-                pair = (component, asset)
-                if pair in seen_pairs:
-                    raise ValueError(f"Duplicate asset entry found: {pair}")
-                seen_pairs.add(pair)
+        """Extra check: No duplicate technology in diversified_technologies."""
+        unique_technologies = set(self.diversified_technologies)
+        if len(unique_technologies) < len(self.diversified_technologies):
+            duplicate_technologies = copy(self.diversified_technologies)
+            for tech in unique_technologies:
+                duplicate_technologies.remove(tech)
+            raise ValueError(
+                f"Duplicate technology entries found: {duplicate_technologies}"
+            )
 
         return self  # no duplicates found
-
-
-class PYPSAConfig(BaseModel):
-    SPORES: SporesConfig

@@ -3,9 +3,11 @@ Various Modelling to Generate Alternative schemes for different energy system op
 
 ## Implemented Algorithms and supported backends
 
-| Algorithm                                             | PyPSA + linopy |
-|-------------------------------------------------------|----------------|
-| [SPORES](https://doi.org/10.1016/j.joule.2020.08.002) | ✅              |
+| Algorithm                                                         | PyPSA + linopy |
+|-------------------------------------------------------------------|----------------|
+| [SPORES](https://doi.org/10.1016/j.joule.2020.08.002)             | ✅             |
+| [Random Directions](https://doi.org/10.1016/j.energy.2017.03.043) | ✅             |
+| [Hop-Skip-JUmp](https://doi.org/10.1016/j.eneco.2010.05.002)      | ✅             |   
 
 ## Running MGA4all
 
@@ -34,22 +36,22 @@ and run your script as you normally would.
 
 ### Testing with included examples
 
-MGA4All also includes a submodule with an example PyPSA network.  A
-user can use this model for testing while working with MGA4All
+MGA4All also includes a an example PyPSA model.  
+A user can use this model for testing while working with MGA4All
 interactively in a Python shell.
 
 ```python
 import yaml
 
-from mga4all.spores import run_spores
+from mga4all.mga_random_directions import random_directions_algorithm
 from mga4all.examples import create_pypsa_network
 
-solver_options = {"highs": {}}
-with open("tests/test_spores_configs/test_diversify.yaml") as yf:
+
+with open("configs/test_config_random_directions.yaml") as yf:
     test_config = yaml.safe_load(yf)
 
 mynetwork = create_pypsa_network()
-mynetwork.optimize()
+mynetwork.optimize(sovler_options={'solver_name': 'highs'})
 
-result = run_spores(mynetwork, test_config, solver_options)
+mga_alternatives, mga_spatial_alternatives = random_directions_algorithm(test_config, mynetwork)
 ```

@@ -8,7 +8,7 @@ from mga4all.examples import create_pypsa_network
 
 @pytest.fixture(scope="module")
 def asset_indices():
-    """Fixture for the SPORE technologies dictionary."""
+    """Fixture for the MGA technologies dictionary."""
     return pd.MultiIndex.from_tuples(
         [
             ("Generator", "p_nom", "solar"),
@@ -25,10 +25,7 @@ def pypsa_network():
 
 
 class MockPypsaNetwork:
-    """A mock object that mimics a pypsa.Network for testing purposes.
-
-    It's designed to work with the `calculate_relative_deployment` function.
-    """
+    """A mock object that mimics a pypsa.Network for testing purposes."""
 
     def __init__(self, p_nom_opt_data, p_nom_max_data=None):
         techs = list(p_nom_opt_data.keys())
@@ -51,8 +48,8 @@ class MockPypsaNetwork:
 
 
 @pytest.fixture()
-def pypsa_spores_config_dict():
+def spores_diversify_config_dict():
     """Fixture for a sample SPORES configuration."""
-    with open("tests/test_spores_configs/test_diversify.yaml") as f:
+    with open("configs/test_config_spores_diversify_only.yaml") as f:
         config = yaml.safe_load(f)
     return config
