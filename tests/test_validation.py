@@ -47,7 +47,9 @@ def test_invalid_values(key, value, spores_diversify_config_dict):
 
 def test_duplicates(spores_diversify_config_dict):
     """Test that a duplicate asset in `diversified_technologies` is caught."""
-    spores_diversify_config_dict["diversified_technologies"].extend(["duplicate", "duplicate"])
+    spores_diversify_config_dict["diversified_technologies"].extend(
+        ["duplicate", "duplicate"]
+    )
 
     with pytest.raises(ValidationError) as exception_info:
         SPORESConfig.model_validate(spores_diversify_config_dict)

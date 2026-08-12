@@ -26,7 +26,15 @@ class PyPSAComponent(StrEnum):
 PYPSA_DATAFRAME_NAMES: dict[PyPSAComponent, str] = dict(
     zip(
         PyPSAComponent,
-        ["generators", "lines", "transformers", "links", "stores", "storage_units", "processes"],
+        [
+            "generators",
+            "lines",
+            "transformers",
+            "links",
+            "stores",
+            "storage_units",
+            "processes",
+        ],
     )
 )
 
@@ -81,6 +89,8 @@ class SPORESConfig(SimpleMGAConfig):
             duplicate_technologies = copy(self.diversified_technologies)
             for tech in unique_technologies:
                 duplicate_technologies.remove(tech)
-            raise ValueError(f"Duplicate technology entries found: {duplicate_technologies}")
+            raise ValueError(
+                f"Duplicate technology entries found: {duplicate_technologies}"
+            )
 
         return self  # no duplicates found

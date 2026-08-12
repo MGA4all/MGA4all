@@ -1,4 +1,3 @@
-
 import yaml
 
 import pandas as pd
@@ -26,8 +25,7 @@ def pypsa_network():
 
 
 class MockPypsaNetwork:
-    """A mock object that mimics a pypsa.Network for testing purposes.
-    """
+    """A mock object that mimics a pypsa.Network for testing purposes."""
 
     def __init__(self, p_nom_opt_data, p_nom_max_data=None):
         techs = list(p_nom_opt_data.keys())
