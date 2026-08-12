@@ -50,8 +50,8 @@ class MockPypsaNetwork:
 
 
 @pytest.fixture()
-def pypsa_spores_config_dict():
+def spores_diversify_config_dict():
     """Fixture for a sample SPORES configuration."""
-    with open("configs/spores_configs/test_config_spores_diversify.yaml") as f:
+    with open("configs/test_config_spores_diversify_only.yaml") as f:
         config = yaml.safe_load(f)
     return config
