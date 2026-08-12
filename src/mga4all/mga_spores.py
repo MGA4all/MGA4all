@@ -19,7 +19,7 @@ def setup_mga_model(config, network):
     slack = config["cost_slack"]
     network_mga, model_mga = create_mga_model(network)
     add_slack_constraint(model_mga, minimum_cost, slack)
-    return (network_mga, model_mga)
+    return network_mga, model_mga
 
 
 def create_target_variables(config, network_mga):
@@ -56,7 +56,7 @@ def compute_diversification_weights(
 
 
 def compute_intensification_weights(intensified_technologies_series):
-    if is_number(intensified_technologies_series) == False:
+    if not is_number(intensified_technologies_series):
         intensification_weights_series = intensified_technologies_series
     else:
         intensification_weights_series = 0
@@ -160,12 +160,13 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
             or intensification_weights_series == 0
         ):
             previous_weights_series = mga_weights[iteration - 1]
-            if spatially_explicit == True:
+            if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
                 ].copy()
             else:
                 diversified_technologies_series = mga_alternatives[iteration - 1].copy()
+
             mga_weights_series = compute_diversification_weights(
                 diversified_technologies_series,
                 previous_weights_series,
@@ -173,12 +174,13 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
             )
         else:
             previous_weights_series = mga_weights[iteration - 1]
-            if spatially_explicit == True:
+            if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
                 ].copy()
             else:
                 diversified_technologies_series = mga_alternatives[iteration - 1].copy()
+
             diversification_weights_series = compute_diversification_weights(
                 diversified_technologies_series,
                 previous_weights_series,
@@ -346,12 +348,13 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
             or intensification_weights_series == 0
         ):
             previous_weights_series = mga_weights[iteration - 1]
-            if spatially_explicit == True:
+            if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
                 ].copy()
             else:
                 diversified_technologies_series = mga_alternatives[iteration - 1].copy()
+
             mga_weights_series = compute_diversification_weights(
                 diversified_technologies_series,
                 previous_weights_series,
@@ -359,12 +362,13 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
             )
         else:
             previous_weights_series = mga_weights[iteration - 1]
-            if spatially_explicit == True:
+            if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
                 ].copy()
             else:
                 diversified_technologies_series = mga_alternatives[iteration - 1].copy()
+
             diversification_weights_series = compute_diversification_weights(
                 diversified_technologies_series,
                 previous_weights_series,

@@ -108,7 +108,7 @@ def extract_diversified_capacity(target_techs, network, spatial=False):
             filtered.groupby(carrier_col)[opt_col].sum().to_dict()
         )
 
-    if spatial is True:
+    if spatial:
         deployed_capacity = deployed_capacity_assets
     else:
         deployed_capacity = deployed_capacity_buses
@@ -192,7 +192,7 @@ def create_mga_model(network):
         include_objective_constant=False
     )  # Model object
 
-    return (network_mga, model_mga)
+    return network_mga, model_mga
 
 
 def add_slack_constraint(model_mga, true_optimal_cost, slack):
@@ -204,11 +204,9 @@ def add_slack_constraint(model_mga, true_optimal_cost, slack):
     )
 
     model_mga.add_constraints(
-        cost_expr <= (1 + slack) * (true_optimal_cost),
+        cost_expr <= (1 + slack) * true_optimal_cost,
         name="budget",
     )
-
-    return
 
 
 def convert_linear_weights_into_pypsa(
@@ -246,11 +244,11 @@ def convert_linear_weights_into_pypsa(
         var = PYPSA_CAPACITY_VARIABLES[component]
         df = pypsa_component_tables[component]
 
-        if spatial is True:
+        if spatial:
             names = df.index[df["carrier"].isin(techs)]
             coeffs = weights.loc[names]
 
-        elif spatial is False:
+        else:
             coeffs = {}
             for tech in techs:
                 if tech not in weights.index:
@@ -259,8 +257,6 @@ def convert_linear_weights_into_pypsa(
                 coeffs.update({name: weights.loc[tech] for name in names})
             coeffs = pd.Series(coeffs)
 
-        else:
-            raise ValueError("`spatial` must be a boolean.")
 
         pypsa_weights[component] = {var: coeffs}
 
@@ -280,5 +276,3 @@ def assign_mga_objective(
     )
 
     model_mga.add_objective(mga_obj, overwrite=True)
-
-    return
