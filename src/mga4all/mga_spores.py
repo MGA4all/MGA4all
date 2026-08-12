@@ -14,27 +14,26 @@ from .model_interface_pypsa import (
 )
 
 
-def setup_mga_model(test_config, network_costopt):
-    network = network_costopt
+def setup_mga_model(config, network):
     minimum_cost = extract_minimum_feasible_cost(network)
-    slack = test_config["cost_slack"]
+    slack = config["cost_slack"]
     network_mga, model_mga = create_mga_model(network)
     add_slack_constraint(model_mga, minimum_cost, slack)
     return (network_mga, model_mga)
 
 
-def create_target_variables(test_config, network_mga):
-    spatial = test_config["spatially_explicit"]
-    target_techs = match_config_techs_to_model_techs(test_config, network_mga)
+def create_target_variables(config, network_mga):
+    spatial = config["spatially_explicit"]
+    target_techs = match_config_techs_to_model_techs(config, network_mga)
     diversified_technologies_series = extract_diversified_capacity(
         target_techs, network_mga, spatial
     )
     return target_techs, diversified_technologies_series, spatial
 
 
-def create_intensification_variables(network_mga, spatial, target_techs, test_config):
+def create_intensification_variables(network_mga, spatial, target_techs, config):
     intensified_technologies_series = extract_intensified_capacity(
-        target_techs, test_config, network_mga, spatial
+        target_techs, config, network_mga, spatial
     )
     return intensified_technologies_series
 
@@ -64,21 +63,21 @@ def compute_intensification_weights(intensified_technologies_series):
     return intensification_weights_series
 
 
-def compute_coefficients(test_config):
-    if isinstance(test_config["intensification_coefficient"], int):
-        intensify_coeff = abs(test_config["intensification_coefficient"])
+def compute_coefficients(config):
+    if isinstance(config["intensification_coefficient"], int):
+        intensify_coeff = abs(config["intensification_coefficient"])
     else:
         intensify_coeff = 1
-    if (test_config["diversification_coefficient"] == "auto") and (
-        test_config["intensification_coefficient"] != 0
+    if (config["diversification_coefficient"] == "auto") and (
+        config["intensification_coefficient"] != 0
     ):
         diversify_coeff = abs(intensify_coeff)
-    elif (test_config["diversification_coefficient"] == "auto") and (
-        test_config["intensification_coefficient"] == 0
+    elif (config["diversification_coefficient"] == "auto") and (
+        config["intensification_coefficient"] == 0
     ):
         diversify_coeff = 1
     else:
-        diversify_coeff = test_config["diversification_coefficient"]
+        diversify_coeff = config["diversification_coefficient"]
     return intensify_coeff, diversify_coeff
 
 
@@ -116,19 +115,19 @@ def update_mga_objective(
     return (network_mga, model_mga)
 
 
-def spores_algorithm(test_config, network_costopt, noise_threshold=0.001):
+def spores_algorithm(config, network_costopt, noise_threshold=0.001):
     mga_alternatives = {}
     mga_spatial_alternatives = {}
     mga_weights = {}
 
-    network_mga, model_mga = setup_mga_model(test_config, network_costopt)
+    network_mga, model_mga = setup_mga_model(config, network_costopt)
     target_techs, diversified_technologies_series, spatially_explicit = (
-        create_target_variables(test_config, network_mga)
+        create_target_variables(config, network_mga)
     )
     intensified_technologies_series = create_intensification_variables(
-        network_mga, spatially_explicit, target_techs, test_config
+        network_mga, spatially_explicit, target_techs, config
     )
-    intensify_coeff, diversify_coeff = compute_coefficients(test_config)
+    intensify_coeff, diversify_coeff = compute_coefficients(config)
 
     mga_weights[0] = diversified_technologies_series.replace(
         diversified_technologies_series.values, 0
@@ -144,10 +143,10 @@ def spores_algorithm(test_config, network_costopt, noise_threshold=0.001):
         intensified_technologies_series
     )
 
-    for iteration in range(1, test_config["alternatives"] + 1):
+    for iteration in range(1, config["alternatives"] + 1):
         if (
             iteration == 1
-            and test_config["intensification_coefficient"] != 0
+            and config["intensification_coefficient"] != 0
             and isinstance(intensification_weights_series, pd.Series)
         ):
             mga_weights_series = compute_combined_weights(
@@ -157,7 +156,7 @@ def spores_algorithm(test_config, network_costopt, noise_threshold=0.001):
                 diversify_coeff,
             )
         elif iteration == 1 and (
-            test_config["intensification_coefficient"] == 0
+            config["intensification_coefficient"] == 0
             or intensification_weights_series == 0
         ):
             previous_weights_series = mga_weights[iteration - 1]
@@ -300,21 +299,21 @@ def is_different_enough(
     return True
 
 
-def spores_algorithm_adaptive(test_config, network_costopt, noise_threshold=0.001):
+def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
     MAX_NOISE_ATTEMPTS = 50
 
     mga_alternatives = {}
     mga_spatial_alternatives = {}
     mga_weights = {}
 
-    network_mga, model_mga = setup_mga_model(test_config, network_costopt)
+    network_mga, model_mga = setup_mga_model(config, network_costopt)
     target_techs, diversified_technologies_series, spatially_explicit = (
-        create_target_variables(test_config, network_mga)
+        create_target_variables(config, network_mga)
     )
     intensified_technologies_series = create_intensification_variables(
-        network_mga, spatially_explicit, target_techs, test_config
+        network_mga, spatially_explicit, target_techs, config
     )
-    intensify_coeff, diversify_coeff = compute_coefficients(test_config)
+    intensify_coeff, diversify_coeff = compute_coefficients(config)
 
     mga_weights[0] = diversified_technologies_series.replace(
         diversified_technologies_series.values, 0
@@ -330,10 +329,10 @@ def spores_algorithm_adaptive(test_config, network_costopt, noise_threshold=0.00
         intensified_technologies_series
     )
 
-    for iteration in range(1, test_config["alternatives"] + 1):
+    for iteration in range(1, config["alternatives"] + 1):
         if (
             iteration == 1
-            and test_config["intensification_coefficient"] != 0
+            and config["intensification_coefficient"] != 0
             and isinstance(intensification_weights_series, pd.Series)
         ):
             mga_weights_series = compute_combined_weights(
@@ -343,7 +342,7 @@ def spores_algorithm_adaptive(test_config, network_costopt, noise_threshold=0.00
                 diversify_coeff,
             )
         elif iteration == 1 and (
-            test_config["intensification_coefficient"] == 0
+            config["intensification_coefficient"] == 0
             or intensification_weights_series == 0
         ):
             previous_weights_series = mga_weights[iteration - 1]
