@@ -40,7 +40,7 @@ class AssetGroup(BaseModel):
     """Asset names of this component type to be targeted."""
 
 
-class SPORESConfig(BaseModel):
+class SimpleMGAConfig(BaseModel):
     config_name: Annotated[str, StringConstraints(min_length=1)]
     """Descriptive name of this configuration, used in the output folder name to save results."""
     model_interface: Literal["pypsa"]
@@ -54,7 +54,18 @@ class SPORESConfig(BaseModel):
     """Whether to target MGA variables per node or at the system level only."""
     diversification_coefficient: Literal["auto"] | PositiveFloat
     """Diversification coefficient, must be "auto" or positive."""
-    intensification_coefficient: int | list[int]
+
+
+class HopSkipJump(SimpleMGAConfig):
+    pass
+
+
+class RandomDirections(SimpleMGAConfig):
+    pass
+
+
+class SPORESConfig(SimpleMGAConfig):
+    intensification_coefficient: Literal[-1, 0, 1] | list[Literal[-1, 0, 1]]
     """Intensification coefficient, must be 0, 1, -1, or a list of those."""
 
     diversified_technologies: list[str] = Field(min_length=0)
@@ -73,19 +84,3 @@ class SPORESConfig(BaseModel):
             raise ValueError(f"Duplicate technology entries found: {duplicate_technologies}")
 
         return self  # no duplicates found
-
-
-class SimpleMGAConfig(BaseModel):
-    config_name: Annotated[str, StringConstraints(min_length=1)]
-    """Descriptive name of this configuration, used in the output folder name to save results."""
-    model_interface: str
-    """Which model interface to use (e.g., PyPSA's)."""
-
-    alternatives: PositiveInt
-    """Number of MGA alternatives to generate."""
-    cost_slack: Annotated[float, Field(gt=0, lt=1)]
-    """Percentage relaxation of the optimal cost expressed as a fraction (e.g., 10% is 0.1)"""
-    spatially_explicit: bool
-    """Whether to target MGA variables per node or at the system level only."""
-    diversification_coefficient: Literal["auto"] | PositiveFloat
-    """Diversification coefficient, must be "auto" or positive."""

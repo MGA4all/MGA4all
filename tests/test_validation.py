@@ -33,7 +33,7 @@ def test_missing_keys(key, spores_diversify_config_dict):
         ("alternatives", -1),
         ("cost_slack", -1),
         ("diversification_coefficient", -1),
-        ("intensification_coefficient", 1.5),
+        ("intensification_coefficient", 5),
         ("diversified_technologies", 1),
         ("intensified_technologies", 1),
     ],
@@ -47,8 +47,7 @@ def test_invalid_values(key, value, spores_diversify_config_dict):
 
 def test_duplicates(spores_diversify_config_dict):
     """Test that a duplicate asset in `diversified_technologies` is caught."""
-    spores_diversify_config_dict["diversified_technologies"].append("OCGT")
-    spores_diversify_config_dict["diversified_technologies"].append("OCGT")
+    spores_diversify_config_dict["diversified_technologies"].extend(["duplicate", "duplicate"])
 
     with pytest.raises(ValidationError) as exception_info:
         SPORESConfig.model_validate(spores_diversify_config_dict)
