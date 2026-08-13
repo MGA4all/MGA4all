@@ -76,12 +76,30 @@ class RandomDirectionsConfig(SimpleMGAConfig):
 
 
 class SPORESConfig(SimpleMGAConfig):
-    intensification_coefficient: Literal[-1, 0, 1] | list[Literal[-1, 0, 1]] | None = (
-        None
-    )
+    intensification_coefficient: Literal[-1, 0, 1] | list[Literal[-1, 0, 1]] = 0
     """Intensification coefficient, must be 0, 1, -1, or a list of those."""
     intensified_technologies: list[str] = Field(min_length=0)
     """Which technologies to intensify during the MGA run."""
+
+    @model_validator(mode="after")
+    def expand_intensification_coefficient(self):
+        """Correctly set the intensification coefficients: one per technology."""
+        num_intensified = len(self.intensified_technologies)
+        coefficients = self.intensification_coefficient
+
+        if num_intensified == 0:
+            coefficients = 0
+        elif isinstance(coefficients, int):
+            coefficients = [coefficients] * num_intensified
+
+        elif len(coefficients) != num_intensified:
+            raise ValueError(
+                f"Number of intensification coefficients {len(coefficients)} "
+                f"does not match number of intensified technologies {num_intensified}"
+            )
+
+        self.intensification_coefficient = coefficients
+        return self
 
     @model_validator(mode="after")
     def check_for_duplicates(self) -> Self:

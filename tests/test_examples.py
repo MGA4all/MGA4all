@@ -51,8 +51,8 @@ def spores_intensify_config():
         ("hop_skip_jump_config", hop_skip_jump_algorithm),
         ("random_directions_config", random_directions_algorithm),
         ("spores_diversify_config", spores_algorithm),
-        ("spores_diversify_config", spores_algorithm),
-        ("spores_intensify_config", spores_algorithm_adaptive),
+        ("spores_intensify_config", spores_algorithm),
+        ("spores_diversify_config", spores_algorithm_adaptive),
         ("spores_intensify_config", spores_algorithm_adaptive),
     ],
 )
