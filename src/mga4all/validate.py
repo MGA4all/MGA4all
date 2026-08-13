@@ -60,8 +60,11 @@ class SimpleMGAConfig(BaseModel):
     """Percentage relaxation of the optimal cost expressed as a fraction (e.g., 10% is 0.1)"""
     spatially_explicit: bool
     """Whether to target MGA variables per node or at the system level only."""
-    diversification_coefficient: Literal["auto"] | PositiveFloat
-    """Diversification coefficient, must be "auto" or positive."""
+    diversification_coefficient: PositiveFloat = 1
+    """Diversification coefficient, must be positive if given. Default: 1."""
+
+    diversified_technologies: list[str] = Field(min_length=0)
+    """Which technologies to diversify during the MGA run."""
 
 
 class HopSkipJumpConfig(SimpleMGAConfig):
@@ -73,11 +76,10 @@ class RandomDirectionsConfig(SimpleMGAConfig):
 
 
 class SPORESConfig(SimpleMGAConfig):
-    intensification_coefficient: Literal[-1, 0, 1] | list[Literal[-1, 0, 1]]
+    intensification_coefficient: Literal[-1, 0, 1] | list[Literal[-1, 0, 1]] | None = (
+        None
+    )
     """Intensification coefficient, must be 0, 1, -1, or a list of those."""
-
-    diversified_technologies: list[str] = Field(min_length=0)
-    """Which technologies to diversify during the MGA run."""
     intensified_technologies: list[str] = Field(min_length=0)
     """Which technologies to intensify during the MGA run."""
 

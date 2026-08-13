@@ -1,3 +1,4 @@
+import pypsa
 from .model_interface_pypsa import (
     match_config_techs_to_model_techs,
     extract_diversified_capacity,
@@ -51,7 +52,7 @@ def update_mga_objective(
 
 
 def hop_skip_jump_algorithm(
-    config: HopSkipJumpConfig, network_costopt, noise_threshold=0.001
+    config: HopSkipJumpConfig, network_costopt: pypsa.Network, noise_threshold=0.001
 ):
     mga_alternatives = {}
     mga_spatial_alternatives = {}

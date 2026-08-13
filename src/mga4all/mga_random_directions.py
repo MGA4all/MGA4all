@@ -1,4 +1,5 @@
 import pandas as pd
+import pypsa
 import numpy as np
 
 from .model_interface_pypsa import (
@@ -24,14 +25,7 @@ def setup_mga_model(config: RandomDirectionsConfig, network_costopt):
 def create_target_variables(config: RandomDirectionsConfig, network_mga):
     spatial = config.spatially_explicit
     target_techs = match_config_techs_to_model_techs(config, network_mga)
-    deployed_capacity = extract_diversified_capacity(target_techs, network_mga, spatial)
-    deployed_capacity_series = pd.Series(
-        {
-            key: value
-            for inner in deployed_capacity.values
-            for key, value in inner.items()
-        }
-    )
+    deployed_capacity_series = extract_diversified_capacity(target_techs, network_mga, spatial)
     return target_techs, deployed_capacity_series, spatial
 
 
@@ -52,7 +46,9 @@ def update_mga_objective(
     return (network_mga, model_mga)
 
 
-def random_directions_algorithm(config: RandomDirectionsConfig, network_costopt):
+def random_directions_algorithm(
+    config: RandomDirectionsConfig, network_costopt: pypsa.Network
+):
     mga_alternatives = {}
     mga_spatial_alternatives = {}
 

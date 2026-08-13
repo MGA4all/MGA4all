@@ -12,8 +12,6 @@ from mga4all.validate import SPORESConfig
         "alternatives",
         "cost_slack",
         "spatially_explicit",
-        "diversification_coefficient",
-        "intensification_coefficient",
         "diversified_technologies",
         "intensified_technologies",
     ],

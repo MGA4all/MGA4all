@@ -1,4 +1,5 @@
 import pandas as pd
+import pypsa
 import numpy as np
 from pandas.api.types import is_number
 from scipy.stats import spearmanr
@@ -119,7 +120,9 @@ def update_mga_objective(
     return (network_mga, model_mga)
 
 
-def spores_algorithm(config: SPORESConfig, network_costopt, noise_threshold=0.001):
+def spores_algorithm(
+    config: SPORESConfig, network_costopt: pypsa.Network, noise_threshold=0.001
+):
     mga_alternatives = {}
     mga_spatial_alternatives = {}
     mga_weights = {}
@@ -306,7 +309,7 @@ def is_different_enough(
 
 
 def spores_algorithm_adaptive(
-    config: SPORESConfig, network_costopt, noise_threshold=0.001
+    config: SPORESConfig, network_costopt: pypsa.Network, noise_threshold=0.001
 ):
     MAX_NOISE_ATTEMPTS = 50
 
