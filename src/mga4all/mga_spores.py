@@ -64,7 +64,7 @@ def compute_intensification_weights(intensified_technologies_series):
     return intensification_weights_series
 
 
-#FIXME: move into validation
+# FIXME: move into validation
 def compute_coefficients(config: SPORESConfig):
     if isinstance(config.intensification_coefficient, int):
         intensify_coeff = abs(config.intensification_coefficient)
@@ -305,7 +305,9 @@ def is_different_enough(
     return True
 
 
-def spores_algorithm_adaptive(config: SPORESConfig, network_costopt, noise_threshold=0.001):
+def spores_algorithm_adaptive(
+    config: SPORESConfig, network_costopt, noise_threshold=0.001
+):
     MAX_NOISE_ATTEMPTS = 50
 
     mga_alternatives = {}

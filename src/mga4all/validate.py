@@ -64,11 +64,11 @@ class SimpleMGAConfig(BaseModel):
     """Diversification coefficient, must be "auto" or positive."""
 
 
-class HopSkipJump(SimpleMGAConfig):
+class HopSkipJumpConfig(SimpleMGAConfig):
     pass
 
 
-class RandomDirections(SimpleMGAConfig):
+class RandomDirectionsConfig(SimpleMGAConfig):
     pass
 
 
