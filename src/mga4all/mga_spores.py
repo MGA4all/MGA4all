@@ -119,7 +119,6 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
     mga_alternatives = {}
     mga_spatial_alternatives = {}
     mga_weights = {}
-    mga_diversification_weights = {}
 
     network_mga, model_mga = setup_mga_model(config, network_costopt)
     target_techs, diversified_technologies_series, spatially_explicit = (
@@ -131,7 +130,7 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
     intensify_coeff, diversify_coeff = compute_coefficients(config)
 
     mga_weights[0] = pd.Series(0, index=diversified_technologies_series.index)
-    mga_diversification_weights[0] = pd.Series(0, index=diversified_technologies_series.index)
+    mga_diversification_weights = pd.Series(0, index=diversified_technologies_series.index)
     mga_spatial_alternatives[0] = extract_diversified_capacity(
         target_techs, network_costopt, spatial=True
     )
@@ -165,7 +164,7 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
             config["intensification_coefficient"] == 0
             or intensification_weights_series == 0
         ):
-            previous_weights_series = mga_diversification_weights[iteration - 1]
+            previous_weights_series = mga_diversification_weights
             if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
@@ -183,7 +182,7 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
         # In all other cases, both intensification and diversification are
         # accounted for, and the coefficients determine their importance
         else:
-            previous_weights_series = mga_diversification_weights[iteration - 1]
+            previous_weights_series = mga_diversification_weights
             if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
@@ -218,7 +217,7 @@ def spores_algorithm(config, network_costopt, noise_threshold=0.001):
             target_techs, network_mga, spatial=True
         )
         mga_weights[iteration] = mga_weights_series.copy()
-        mga_diversification_weights[iteration] = diversification_weights_series.copy()
+        mga_diversification_weights = diversification_weights_series
 
     return mga_alternatives, mga_spatial_alternatives, mga_weights
 
@@ -318,7 +317,6 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
     mga_alternatives = {}
     mga_spatial_alternatives = {}
     mga_weights = {}
-    mga_diversification_weights = {}
 
     network_mga, model_mga = setup_mga_model(config, network_costopt)
     target_techs, diversified_technologies_series, spatially_explicit = (
@@ -330,7 +328,7 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
     intensify_coeff, diversify_coeff = compute_coefficients(config)
 
     mga_weights[0] = pd.Series(0, index=diversified_technologies_series.index)
-    mga_diversification_weights[0] = pd.Series(0, index=diversified_technologies_series.index)
+    mga_diversification_weights = pd.Series(0, index=diversified_technologies_series.index)
     mga_spatial_alternatives[0] = extract_diversified_capacity(
         target_techs, network_costopt, spatial=True
     )
@@ -359,7 +357,7 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
             config["intensification_coefficient"] == 0
             or intensification_weights_series == 0
         ):
-            previous_weights_series = mga_diversification_weights[iteration - 1]
+            previous_weights_series = mga_diversification_weights
             if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
@@ -374,7 +372,7 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
             )
             mga_weights_series = diversification_weights_series
         else:
-            previous_weights_series = mga_diversification_weights[iteration - 1]
+            previous_weights_series = mga_diversification_weights
             if spatially_explicit:
                 diversified_technologies_series = mga_spatial_alternatives[
                     iteration - 1
@@ -428,6 +426,6 @@ def spores_algorithm_adaptive(config, network_costopt, noise_threshold=0.001):
             target_techs, network_mga, spatial=True
         )
         mga_weights[iteration] = mga_weights_series.copy()
-        mga_diversification_weights[iteration] = diversification_weights_series.copy()
+        mga_diversification_weights = diversification_weights_series
 
     return mga_alternatives, mga_spatial_alternatives, mga_weights
