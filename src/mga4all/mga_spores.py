@@ -72,18 +72,7 @@ def compute_coefficients(config: SPORESConfig):
     else:
         intensify_coeff = 1
 
-    if (config.diversification_coefficient == "auto") and (
-        config.intensification_coefficient != 0
-    ):
-        diversify_coeff = abs(intensify_coeff)
-    elif (config.diversification_coefficient == "auto") and (
-        config.intensification_coefficient == 0
-    ):
-        diversify_coeff = 1
-    else:
-        diversify_coeff = config.diversification_coefficient
-
-    return intensify_coeff, diversify_coeff
+    return intensify_coeff, config.diversification_coefficient
 
 
 def compute_combined_weights(
