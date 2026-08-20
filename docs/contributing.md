@@ -58,9 +58,34 @@ _Note:_ some pytest options are enabled by default, see the
   ```
 - Install in editable mode:
   ```
-  $ pip install -e .[pypsa,dev]
+  $ pip install -e .[pypsa] --group dev
   ```
 - Run tests:
   ```
   $ pytest [options]
+  ```
+
+## Pre-commit
+
+This repository includes a [pre-commit](https://www.pre-commit.com)
+configuration to automatically perform linting and formatting actions
+on code and configuration files. The `pre-commit` dependency is included
+in the `dev` dependency group.
+
+With your dev environment set up, here are some relevant commands:
+
+- Install the pre-commit hooks:
+  ```shell
+  $ pre-commit install
+  ```
+
+- Run the installed hooks:
+  ```shell
+  $ pre-commit run        # run pre-commit as it would for your next commit
+  $ pre-commit run --all  # run all hooks for all files, modified or not
+  ```
+
+- Ignore pre-commit for a (temporary) commit
+  ```shell
+  $ git commit --no-verify ...  $ skip pre-commit hooks, at your own risk
   ```

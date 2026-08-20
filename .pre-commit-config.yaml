@@ -1,0 +1,54 @@
+#.pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: no-commit-to-branch
+      - id: pretty-format-json
+        args: [--autofix, --indent=2]
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+        args: [--assume-in-merge]
+  - repo: https://github.com/citation-file-format/cffconvert
+    rev: 054bda51dbe278b3e86f27c890e3f3ac877d616c
+    hooks:
+      - id: validate-cff
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.21.0
+    hooks:
+      - id: yamlfmt
+        args:
+          - -formatter
+          - "retain_line_breaks_single=true"
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args:
+          - -d
+          - |
+            {
+              extends: default,
+              rules: {
+                empty-lines: {max: 1},
+                document-start: disable,
+                line-length: {max: 120}
+              }
+            }
+  - repo: https://github.com/psf/black
+    rev: 26.5.1
+    hooks:
+      - id: black
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.16.3
+    hooks:
+      # Run the linter.
+      - id: ruff-check
+        args: [--fix]
