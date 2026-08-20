@@ -1,6 +1,4 @@
-import pandas as pd
-import numpy as np
-
+import pypsa
 from .model_interface_pypsa import (
     match_config_techs_to_model_techs,
     extract_diversified_capacity,
@@ -9,20 +7,21 @@ from .model_interface_pypsa import (
     add_slack_constraint,
     assign_mga_objective,
 )
+from .validate import HopSkipJumpConfig
 
 
-def setup_mga_model(test_config, network_costopt):
+def setup_mga_model(config: HopSkipJumpConfig, network_costopt):
     network = network_costopt
     minimum_cost = extract_minimum_feasible_cost(network)
-    slack = test_config["cost_slack"]
+    slack = config.cost_slack
     network_mga, model_mga = create_mga_model(network)
     add_slack_constraint(model_mga, minimum_cost, slack)
     return (network_mga, model_mga)
 
 
-def create_target_variables(test_config, network_mga):
-    spatial = test_config["spatially_explicit"]
-    target_techs = match_config_techs_to_model_techs(test_config, network_mga)
+def create_target_variables(config: HopSkipJumpConfig, network_mga):
+    spatial = config.spatially_explicit
+    target_techs = match_config_techs_to_model_techs(config, network_mga)
     deployed_capacity_series = extract_diversified_capacity(
         target_techs, network_mga, spatial
     )
@@ -52,14 +51,16 @@ def update_mga_objective(
     return (network_mga, model_mga)
 
 
-def hop_skip_jump_algorithm(test_config, network_costopt, noise_threshold=0.001):
+def hop_skip_jump_algorithm(
+    config: HopSkipJumpConfig, network_costopt: pypsa.Network, noise_threshold=0.001
+):
     mga_alternatives = {}
     mga_spatial_alternatives = {}
     mga_weights = {}
 
-    network_mga, model_mga = setup_mga_model(test_config, network_costopt)
+    network_mga, model_mga = setup_mga_model(config, network_costopt)
     target_techs, deployed_capacity_series, spatially_explicit = (
-        create_target_variables(test_config, network_mga)
+        create_target_variables(config, network_mga)
     )
 
     mga_weights[0] = deployed_capacity_series.replace(
@@ -71,9 +72,9 @@ def hop_skip_jump_algorithm(test_config, network_costopt, noise_threshold=0.001)
     mga_alternatives[0] = extract_diversified_capacity(
         target_techs, network_costopt, spatial=False
     )
-    for iteration in range(1, test_config["alternatives"] + 1):
+    for iteration in range(1, config.alternatives + 1):
         previous_weights_series = mga_weights[iteration - 1]
-        if spatially_explicit == True:
+        if spatially_explicit:
             deployed_capacity_series = mga_spatial_alternatives[iteration - 1].copy()
         else:
             deployed_capacity_series = mga_alternatives[iteration - 1].copy()

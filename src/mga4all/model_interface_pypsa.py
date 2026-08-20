@@ -12,12 +12,13 @@ PYPSA_CAPACITY_VARIABLES = {
 
 
 def match_config_techs_to_model_techs(config, network):
-    diversified_techs = set(config["diversified_technologies"])
+    diversified_techs = set(config.diversified_technologies)
 
-    if config["intensified_technologies"] and (
-        len(config["intensified_technologies"]) != 0
+    if (
+        hasattr(config, "intensified_technologies")
+        and len(config.intensified_technologies) != 0
     ):
-        intensified_techs = set(config["intensified_technologies"])
+        intensified_techs = set(config.intensified_technologies)
         config_techs = intensified_techs | diversified_techs
     else:
         intensified_techs = None
@@ -120,7 +121,7 @@ def extract_diversified_capacity(target_techs, network, spatial=False):
     return deployed_capacity_series
 
 
-def extract_intensified_capacity(target_techs, test_config, network, spatial=False):
+def extract_intensified_capacity(target_techs, config, network, spatial=False):
     component_tables = {
         "Generator": (network.generators, "p_nom_opt", "carrier", "bus"),
         "Link": (network.links, "p_nom_opt", "carrier", "bus0"),
@@ -134,8 +135,8 @@ def extract_intensified_capacity(target_techs, test_config, network, spatial=Fal
         mapping = {
             k: v
             for k, v in zip(
-                test_config["intensified_technologies"],
-                test_config["intensification_coefficient"],
+                config.intensified_technologies,
+                config.intensification_coefficient,
             )
         }
 
