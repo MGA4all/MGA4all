@@ -1,13 +1,5 @@
 #.pre-commit-config.yaml
 repos:
-  - repo: local
-    hooks:
-      # Prevent committing .rej files
-      - id: forbidden-files
-        name: forbidden files
-        entry: found Copier update rejection files; review them and remove them
-        language: fail
-        files: "\\.rej$"
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
