@@ -31,12 +31,15 @@ def create_target_variables(config: RandomDirectionsConfig, network_mga):
     return target_techs, deployed_capacity_series, spatial
 
 
-def compute_random_weights(deployed_capacity_series):
+def compute_random_weights(config, deployed_capacity_series):
+    mga_weights = {}
     mga_weights_series = deployed_capacity_series
-    mga_weights_series[:] = np.round(
-        np.random.uniform(-1, 1, len(mga_weights_series)), 2
-    )
-    return mga_weights_series
+    for n in range(1, config.alternatives + 1):
+        mga_weights_series[:] = np.round(
+            np.random.uniform(-1, 1, len(mga_weights_series)), 2
+        )
+        mga_weights[n] = mga_weights_series.copy()
+    return mga_weights
 
 
 def update_mga_objective(
@@ -58,8 +61,20 @@ def random_directions_algorithm(
     target_techs, deployed_capacity_series, spatially_explicit = (
         create_target_variables(config, network_mga)
     )
+
+    mga_spatial_alternatives[0] = extract_diversified_capacity(
+        target_techs, network_costopt, spatial=True
+    )
+    mga_alternatives[0] = extract_diversified_capacity(
+        target_techs, network_costopt, spatial=False
+    )
+
+    # Pre-compute all randomised weights; helps with parallelisation
+    mga_weights = compute_random_weights(config, deployed_capacity_series)
+    mga_weights = {"0": pd.Series(0, index=mga_weights[1].index), **mga_weights}
+
     for iteration in range(1, config.alternatives + 1):
-        mga_weights_series = compute_random_weights(deployed_capacity_series)
+        mga_weights_series = mga_weights[iteration]
         network_mga, model_mga = update_mga_objective(
             network_mga, model_mga, mga_weights_series, target_techs, spatially_explicit
         )
@@ -75,4 +90,4 @@ def random_directions_algorithm(
             target_techs, network_mga, spatial=True
         )
 
-    return mga_alternatives, mga_spatial_alternatives
+    return mga_alternatives, mga_spatial_alternatives, mga_weights

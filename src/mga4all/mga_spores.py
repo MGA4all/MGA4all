@@ -15,6 +15,8 @@ from .model_interface_pypsa import (
 )
 from .validate import SPORESConfig
 
+WEIGHTING_METHODS = ["integer", "proportional"]
+
 
 def setup_mga_model(config: SPORESConfig, network):
     minimum_cost = extract_minimum_feasible_cost(network)
@@ -49,11 +51,13 @@ def compute_diversification_weights(
     deployed_capacity_series,
     previous_weights_series,
     noise_threshold=0.001,
-    weighting_method="integer",
+    weighting_method="proportional",
 ):
     new_weights_series = deployed_capacity_series
     if weighting_method == "integer":
         new_weights_series[:] = (deployed_capacity_series > noise_threshold).astype(int)
+    elif weighting_method == "proportional":
+        new_weights_series[:] = normalise_l2(deployed_capacity_series).round(2)
     updated_weights_series = previous_weights_series + new_weights_series
     # Perturb if all values are the same
     diversification_weights_series = normalise_l2(updated_weights_series)
