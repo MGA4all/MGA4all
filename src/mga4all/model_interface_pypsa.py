@@ -257,7 +257,6 @@ def convert_linear_weights_into_pypsa(
                 coeffs.update({name: weights.loc[tech] for name in names})
             coeffs = pd.Series(coeffs)
 
-
         pypsa_weights[component] = {var: coeffs}
 
     return pypsa_weights
