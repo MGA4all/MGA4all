@@ -25,7 +25,9 @@ def setup_mga_model(config: RandomDirectionsConfig, network_costopt):
 def create_target_variables(config: RandomDirectionsConfig, network_mga):
     spatial = config.spatially_explicit
     target_techs = match_config_techs_to_model_techs(config, network_mga)
-    deployed_capacity_series = extract_diversified_capacity(target_techs, network_mga, spatial)
+    deployed_capacity_series = extract_diversified_capacity(
+        target_techs, network_mga, spatial
+    )
     return target_techs, deployed_capacity_series, spatial
 
 

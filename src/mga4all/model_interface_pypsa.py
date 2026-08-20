@@ -14,7 +14,10 @@ PYPSA_CAPACITY_VARIABLES = {
 def match_config_techs_to_model_techs(config, network):
     diversified_techs = set(config.diversified_technologies)
 
-    if hasattr(config, "intensified_technologies") and len(config.intensified_technologies) != 0:
+    if (
+        hasattr(config, "intensified_technologies")
+        and len(config.intensified_technologies) != 0
+    ):
         intensified_techs = set(config.intensified_technologies)
         config_techs = intensified_techs | diversified_techs
     else:

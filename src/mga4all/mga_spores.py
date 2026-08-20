@@ -46,7 +46,10 @@ def normalise_l2(weights_series):
 
 
 def compute_diversification_weights(
-    deployed_capacity_series, previous_weights_series, noise_threshold=0.001, weighting_method="integer"
+    deployed_capacity_series,
+    previous_weights_series,
+    noise_threshold=0.001,
+    weighting_method="integer",
 ):
     new_weights_series = deployed_capacity_series
     if weighting_method == "integer":
@@ -126,7 +129,9 @@ def spores_algorithm(
     intensify_coeff, diversify_coeff = compute_coefficients(config)
 
     mga_weights[0] = pd.Series(0, index=diversified_technologies_series.index)
-    mga_diversification_weights = pd.Series(0, index=diversified_technologies_series.index)
+    mga_diversification_weights = pd.Series(
+        0, index=diversified_technologies_series.index
+    )
     mga_spatial_alternatives[0] = extract_diversified_capacity(
         target_techs, network_costopt, spatial=True
     )
@@ -139,22 +144,24 @@ def spores_algorithm(
     )
 
     for iteration in range(1, config.alternatives + 1):
-        
-        # If intensification is required, the first iteration 
+
+        # If intensification is required, the first iteration
         # implements only pure intensification to find the extreme
         if (
             iteration == 1
             and config.intensification_coefficient != 0
             and isinstance(intensification_weights_series, pd.Series)
         ):
-            diversification_weights_series = pd.Series(0, index=diversified_technologies_series.index)
+            diversification_weights_series = pd.Series(
+                0, index=diversified_technologies_series.index
+            )
             mga_weights_series = compute_combined_weights(
                 intensification_weights_series,
                 diversification_weights_series,
                 intensify_coeff,
                 diversify_coeff,
             )
-        
+
         # If intensification is not required, simple diversification applies
         elif iteration == 1 and (
             config.intensification_coefficient == 0
@@ -174,7 +181,7 @@ def spores_algorithm(
                 noise_threshold,
             )
             mga_weights_series = diversification_weights_series
-        
+
         # In all other cases, both intensification and diversification are
         # accounted for, and the coefficients determine their importance
         else:
@@ -326,7 +333,9 @@ def spores_algorithm_adaptive(
     intensify_coeff, diversify_coeff = compute_coefficients(config)
 
     mga_weights[0] = pd.Series(0, index=diversified_technologies_series.index)
-    mga_diversification_weights = pd.Series(0, index=diversified_technologies_series.index)
+    mga_diversification_weights = pd.Series(
+        0, index=diversified_technologies_series.index
+    )
     mga_spatial_alternatives[0] = extract_diversified_capacity(
         target_techs, network_costopt, spatial=True
     )
@@ -344,7 +353,9 @@ def spores_algorithm_adaptive(
             and config.intensification_coefficient != 0
             and isinstance(intensification_weights_series, pd.Series)
         ):
-            diversification_weights_series = pd.Series(0, index=diversified_technologies_series.index)
+            diversification_weights_series = pd.Series(
+                0, index=diversified_technologies_series.index
+            )
             mga_weights_series = compute_combined_weights(
                 intensification_weights_series,
                 diversification_weights_series,
