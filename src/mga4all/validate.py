@@ -82,17 +82,14 @@ class SPORESConfig(SimpleMGAConfig):
     """Which technologies to intensify during the MGA run."""
 
     @model_validator(mode="after")
-    def expand_intensification_coefficient(self):
+    def validate_intensification_coefficient(self):
         """Correctly set the intensification coefficients: one per technology."""
         num_intensified = len(self.intensified_technologies)
         coefficients = self.intensification_coefficient
 
         if num_intensified == 0:
             coefficients = 0
-        elif isinstance(coefficients, int):
-            coefficients = [coefficients] * num_intensified
-
-        elif len(coefficients) != num_intensified:
+        elif isinstance(coefficients, list) and len(coefficients) != num_intensified:
             raise ValueError(
                 f"Number of intensification coefficients {len(coefficients)} "
                 f"does not match number of intensified technologies {num_intensified}"
