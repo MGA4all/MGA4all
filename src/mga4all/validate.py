@@ -66,6 +66,25 @@ class SimpleMGAConfig(BaseModel):
     diversified_technologies: list[str] = Field(min_length=0)
     """Which technologies to diversify during the MGA run."""
 
+    @staticmethod
+    def find_duplicates(items: list) -> list:
+        """Return the duplicates from the given list of items."""
+        duplicates = copy(items)
+        for item in set(items):
+            duplicates.remove(item)
+        return duplicates
+
+    @model_validator(mode="after")
+    def ensure_unique_diversified_technologies(self) -> Self:
+        """Ensure there are no duplicates in diversified_technologies."""
+        if len(set(self.diversified_technologies)) < len(self.diversified_technologies):
+            duplicates = self.find_duplicates(self.diversified_technologies)
+            raise ValueError(
+                f"Duplicate `diversified_technologies` entries found: {duplicates}"
+            )
+
+        return self  # no duplicates found
+
 
 class HopSkipJumpConfig(SimpleMGAConfig):
     pass
@@ -99,15 +118,12 @@ class SPORESConfig(SimpleMGAConfig):
         return self
 
     @model_validator(mode="after")
-    def check_for_duplicates(self) -> Self:
-        """Extra check: No duplicate technology in diversified_technologies."""
-        unique_technologies = set(self.diversified_technologies)
-        if len(unique_technologies) < len(self.diversified_technologies):
-            duplicate_technologies = copy(self.diversified_technologies)
-            for tech in unique_technologies:
-                duplicate_technologies.remove(tech)
+    def ensure_unique_intensified_technologies(self) -> Self:
+        """Ensure there are no duplicates in diversified_technologies."""
+        if len(set(self.intensified_technologies)) < len(self.intensified_technologies):
+            duplicates = self.find_duplicates(self.intensified_technologies)
             raise ValueError(
-                f"Duplicate technology entries found: {duplicate_technologies}"
+                f"Duplicate `intensified_technologies` entries found: {duplicates}"
             )
 
         return self  # no duplicates found

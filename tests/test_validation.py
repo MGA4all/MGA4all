@@ -42,13 +42,13 @@ def test_invalid_values(key, value, spores_diversify_config_dict):
     with pytest.raises(ValidationError):
         SPORESConfig.model_validate(spores_diversify_config_dict)
 
-
-def test_duplicates(spores_diversify_config_dict):
+@pytest.mark.parametrize("attribute", ["diversified_technologies", "intensified_technologies"])
+def test_duplicates(spores_diversify_config_dict, attribute):
     """Test that a duplicate asset in `diversified_technologies` is caught."""
-    spores_diversify_config_dict["diversified_technologies"].extend(
+    spores_diversify_config_dict[attribute].extend(
         ["duplicate", "duplicate"]
     )
 
     with pytest.raises(ValidationError) as exception_info:
         SPORESConfig.model_validate(spores_diversify_config_dict)
-    assert "Duplicate technology entries found:" in str(exception_info.value)
+    assert f"Duplicate `{attribute}` entries found:" in str(exception_info.value)
