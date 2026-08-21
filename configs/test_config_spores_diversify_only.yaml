@@ -5,6 +5,6 @@ model_interface: pypsa
 cost_slack: 0.2
 alternatives: 5
 spatially_explicit: True
-intensification_coefficient: 0 # Can be -1 for positive intensification, 1 for negative intensification, 0 for no intensification, or a list of those for per-technology intensification direction
+intensification_coefficient: 0
 diversified_technologies: ["wind", "solar", "gas", "battery"]
 intensified_technologies: []
