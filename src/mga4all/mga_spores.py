@@ -1,17 +1,17 @@
+import numpy as np
 import pandas as pd
 import pypsa
-import numpy as np
 from pandas.api.types import is_number
 from scipy.stats import spearmanr
 
 from .model_interface_pypsa import (
-    match_config_techs_to_model_techs,
+    add_slack_constraint,
+    assign_mga_objective,
+    create_mga_model,
     extract_diversified_capacity,
     extract_intensified_capacity,
     extract_minimum_feasible_cost,
-    create_mga_model,
-    add_slack_constraint,
-    assign_mga_objective,
+    match_config_techs_to_model_techs,
 )
 from .validate import SPORESConfig
 
@@ -229,7 +229,7 @@ def spores_algorithm(
 def ranking_similarity(weights_a, weights_b):
     rank_a = weights_a.argsort().argsort()
     rank_b = weights_b.argsort().argsort()
-    corr, pvalue = spearmanr(rank_a, rank_b)
+    corr, _ = spearmanr(rank_a, rank_b)
     return corr
 
 

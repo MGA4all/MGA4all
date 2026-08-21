@@ -7,7 +7,7 @@ Various Modelling to Generate Alternative schemes for different energy system op
 |-------------------------------------------------------------------|----------------|
 | [SPORES](https://doi.org/10.1016/j.joule.2020.08.002)             | ✅             |
 | [Random Directions](https://doi.org/10.1016/j.energy.2017.03.043) | ✅             |
-| [Hop-Skip-JUmp](https://doi.org/10.1016/j.eneco.2010.05.002)      | ✅             |   
+| [Hop-Skip-JUmp](https://doi.org/10.1016/j.eneco.2010.05.002)      | ✅             |
 
 ## Running MGA4all
 
@@ -36,7 +36,7 @@ and run your script as you normally would.
 
 ### Testing with included examples
 
-MGA4All also includes a an example PyPSA model.  
+MGA4All also includes a an example PyPSA model.
 A user can use this model for testing while working with MGA4All
 interactively in a Python shell.
 

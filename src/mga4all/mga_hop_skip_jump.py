@@ -1,11 +1,12 @@
 import pypsa
+
 from .model_interface_pypsa import (
-    match_config_techs_to_model_techs,
-    extract_diversified_capacity,
-    extract_minimum_feasible_cost,
-    create_mga_model,
     add_slack_constraint,
     assign_mga_objective,
+    create_mga_model,
+    extract_diversified_capacity,
+    extract_minimum_feasible_cost,
+    match_config_techs_to_model_techs,
 )
 from .validate import HopSkipJumpConfig
 

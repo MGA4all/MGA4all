@@ -1,7 +1,6 @@
-import yaml
-
 import pandas as pd
 import pytest
+import yaml
 
 from mga4all.examples import create_pypsa_network
 

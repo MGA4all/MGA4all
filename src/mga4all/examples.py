@@ -16,7 +16,7 @@ def load_from_cache_or_fetch_scigrid_de():
     try:
         cachefile.parent.mkdir(parents=True, exist_ok=True)
         network.export_to_netcdf(cachefile)
-    except IOError:  # skip caching if we cannot write to disk for some reason.
+    except OSError:  # skip caching if we cannot write to disk for some reason.
         pass
     return network
 

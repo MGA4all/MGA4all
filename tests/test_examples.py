@@ -1,6 +1,5 @@
-import yaml
-
 import pytest
+import yaml
 
 from mga4all.examples import create_pypsa_network
 from mga4all.mga_hop_skip_jump import hop_skip_jump_algorithm

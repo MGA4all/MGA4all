@@ -1,7 +1,6 @@
 from copy import copy
 from enum import StrEnum
-from typing import Annotated, Literal
-from typing_extensions import Self
+from typing import Annotated, Literal, Self
 
 from pydantic import (
     BaseModel,
